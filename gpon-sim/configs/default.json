@@ -1,0 +1,48 @@
+{
+    "gpon": {
+        "upstream_rate_bps":       1244160000,
+        "downstream_rate_bps":     2488320000,
+        "frame_duration_s":        0.000125,
+        "bytes_per_frame":         19440,
+        "num_onus":                32,
+        "fiber_length_km":         20,
+        "prop_delay_s_per_km":     0.000005,
+        "guard_bytes_per_onu":     32,
+        "split_ratio":             32
+    },
+    "tconts": {
+        "1": {
+            "name":                    "Fixed (CBR) - VoIP",
+            "traffic":                 "cbr",
+            "rate_bps":                1000000,
+            "pkt_size":                160,
+            "buffer_bytes":            10000,
+            "fixed_bytes_per_frame":   160,
+            "comment":                 "Pre-reserva 160 bytes/frame por ONU. T-CONT1 genera 1 pkt cada ~10 frames -> 90% frames sin datos pero el slot esta reservado (costo del CBR garantizado)"
+        },
+        "2": {
+            "name":                    "Assured - Video Streaming",
+            "traffic":                 "poisson",
+            "rate_bps":                5000000,
+            "pkt_size":                1000,
+            "buffer_bytes":            200000,
+            "assured_bytes_per_frame": 1000,
+            "comment":                 "Max 1000 bytes por grant cuando ONU tiene datos. La tasa media (5 Mbps) es garantizada por la combinacion de tasa de generacion + prioridad en DBA"
+        },
+        "4": {
+            "name":                    "Best Effort - Data/Downloads",
+            "traffic":                 "pareto",
+            "rate_bps":                50000000,
+            "pkt_size":                1400,
+            "buffer_bytes":            2000000,
+            "pareto_alpha":            1.5,
+            "comment":                 "Variable segun escenario"
+        }
+    },
+    "simulation": {
+        "duration_s":   10.0,
+        "warmup_s":     1.0,
+        "repetitions":  10,
+        "seed_base":    42
+    }
+}

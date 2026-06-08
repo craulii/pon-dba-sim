@@ -1,0 +1,67 @@
+{
+    "scenarios": [
+        {
+            "name":           "BasicDBA_load10",
+            "algorithm":      "basic",
+            "num_onus":       32,
+            "tcont4_rate_mbps": 10,
+            "description":    "DBA proporcional, carga BE ~30% (subcargado)"
+        },
+        {
+            "name":           "BasicDBA_load25",
+            "algorithm":      "basic",
+            "num_onus":       32,
+            "tcont4_rate_mbps": 25
+        },
+        {
+            "name":           "BasicDBA_load50",
+            "algorithm":      "basic",
+            "num_onus":       32,
+            "tcont4_rate_mbps": 50,
+            "description":    "DBA proporcional, carga BE ~150% (sobrecargado)"
+        },
+        {
+            "name":           "BasicDBA_load75",
+            "algorithm":      "basic",
+            "num_onus":       32,
+            "tcont4_rate_mbps": 75
+        },
+        {
+            "name":           "BasicDBA_load100",
+            "algorithm":      "basic",
+            "num_onus":       32,
+            "tcont4_rate_mbps": 100,
+            "description":    "DBA proporcional, carga BE ~300% (muy sobrecargado)"
+        },
+        {
+            "name":           "QoSDBA_load10",
+            "algorithm":      "qos",
+            "num_onus":       32,
+            "tcont4_rate_mbps": 10
+        },
+        {
+            "name":           "QoSDBA_load25",
+            "algorithm":      "qos",
+            "num_onus":       32,
+            "tcont4_rate_mbps": 25
+        },
+        {
+            "name":           "QoSDBA_load50",
+            "algorithm":      "qos",
+            "num_onus":       32,
+            "tcont4_rate_mbps": 50
+        },
+        {
+            "name":           "QoSDBA_load75",
+            "algorithm":      "qos",
+            "num_onus":       32,
+            "tcont4_rate_mbps": 75
+        },
+        {
+            "name":           "QoSDBA_load100",
+            "algorithm":      "qos",
+            "num_onus":       32,
+            "tcont4_rate_mbps": 100
+        }
+    ]
+}

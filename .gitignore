@@ -1,0 +1,34 @@
+# Binarios compilados OMNeT++
+out/
+pon-dba-sim
+*.o
+*.d
+
+# Resultados de simulación (muy grandes, se regeneran corriendo run_all.sh)
+simulations/results/
+
+# Logs de simulación
+simulations/.cmdenv-log
+simulations/.qtenvrc
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# LaTeX
+Parte\ 2/*.aux
+Parte\ 2/*.log
+Parte\ 2/*.out
+Parte\ 2/*.toc
+
+# Windows Zone.Identifier
+*.Zone.Identifier
+*:Zone.Identifier
+
+# Claude Code local settings
+.claude/
+
+# Archivos temporales
+*.tmp
+*.bak
