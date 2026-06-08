@@ -32,6 +32,10 @@ class BasicDBA:
         """
         bwmap: Dict[int, Dict[int, int]] = {}
 
+        # Restar guard bands igual que QosDBA (ITU-T G.984.3 §8.2: 32 bytes/ONU)
+        guard_overhead = 32 * num_onus
+        effective_capacity = max(0, total_capacity_bytes - guard_overhead)
+
         # Demanda total de cada ONU (suma de todos sus T-CONTs)
         onu_demand = {}
         for onu_id, report in onu_reports.items():
@@ -44,11 +48,11 @@ class BasicDBA:
             demand = onu_demand[onu_id]
 
             if total_demand > 0:
-                # Proporción de la capacidad total
-                share = int(total_capacity_bytes * demand / total_demand)
+                # Proporción de la capacidad efectiva (sin guard bands)
+                share = int(effective_capacity * demand / total_demand)
                 share = min(share, demand)
             else:
-                share = total_capacity_bytes // max(num_onus, 1)
+                share = effective_capacity // max(num_onus, 1)
 
             # Repartir share entre T-CONTs proporcionalmente a sus colas
             onu_total = sum(report["queue_bytes"].values())

@@ -1,484 +1,505 @@
-# CLAUDE.md — Proyecto PON DBA Simulation en OMNeT++
+# CLAUDE.md — Simulador GPON DBA desde cero (SIN OMNeT++)
 
-## Contexto del proyecto
+## CONTEXTO CRÍTICO
 
-Soy estudiante de Ingeniería Civil Telemática en la UTFSM (Chile). Tengo un proyecto semestral para el ramo **TEL-341 Simulación de Redes** donde debo simular un problema de redes usando OMNeT++.
+La profesora del curso TEL-341 (Simulación de Redes, UTFSM) revisó nuestro trabajo anterior y nos dio las siguientes correcciones:
 
-**Equipo:** OmneTeam (David Retuerto, José Vega, Matías Perelli)
+1. **NO usar OMNeT++** — el simulador debe ser 100% propio, desde cero
+2. **Investigar bien GPON** — usar el estándar real ITU-T G.984, no inventar parámetros
+3. **Los tipos de tráfico son T-CONTs, no eMBB/URLLC/mMTC** — esas son categorías 5G, no GPON. GPON tiene 5 tipos de T-CONT definidos en el estándar
+4. **IPACT es de EPON, no de GPON** — GPON usa DBA centralizado con Status Reporting, no polling estilo EPON
+5. **Usar DBA centralizado, no polling** — en GPON la OLT asigna bandwidth basándose en los reportes de las ONUs, sin polling individual
 
-**Tema:** Evaluación de algoritmos de asignación dinámica de ancho de banda (DBA) en redes PON (Passive Optical Network) bajo tráfico 5G multi-servicio.
+## QUÉ DEBE HACER ESTE PROYECTO
 
-**Plazo:** 1 semana. Necesito código funcional, compilable y ejecutable.
+### Simulador de eventos discretos propio en Python
 
----
+Implementar desde cero (sin OMNeT++, sin SimPy, sin ningún framework de simulación):
 
-## Qué debe hacer este proyecto
-
-### Resumen en una línea
-Simular una red PON (OLT + splitter + N ONUs) donde cada ONU genera tráfico 5G de 3 tipos (eMBB, URLLC, mMTC), comparar 2 algoritmos DBA (IPACT vs QoS-aware), y medir latencia/throughput/jitter/pérdida por clase de servicio.
-
-### Arquitectura de la red
-
-```
-[Central Office]
-    |
-  [OLT] ← Motor DBA (IPACT o QoS-DBA)
-    |
-  Feeder Fiber (20km, delay = 100μs)
-    |
-  [Splitter 1:N]
-    |--- Distribution Fiber --- [ONU 0] --- [TrafficGen eMBB]
-    |--- Distribution Fiber --- [ONU 1] --- [TrafficGen URLLC]
-    |--- Distribution Fiber --- [ONU 2] --- [TrafficGen mMTC]
-    |--- ...
-    |--- Distribution Fiber --- [ONU N-1] --- [TrafficGen mixto]
-```
-
-### Mecanismo PON simplificado (TDM upstream)
-
-1. Las ONUs generan tráfico y lo almacenan en buffers internos (3 colas: eMBB, URLLC, mMTC)
-2. Cada ONU envía un mensaje REPORT a la OLT indicando cuántos bytes tiene pendientes por cola
-3. La OLT ejecuta el algoritmo DBA y envía un mensaje GRANT a cada ONU con su slot de transmisión (inicio + duración)
-4. Las ONUs transmiten en su slot asignado (no hay colisiones, es TDM)
-5. Se repite el ciclo (polling cycle)
+1. **Motor de eventos discretos** — cola de eventos ordenada por tiempo, loop principal que saca el próximo evento y lo procesa
+2. **Modelo de red GPON** según ITU-T G.984
+3. **Algoritmos DBA centralizados** — uno básico (proporcional) y uno con diferenciación de QoS por T-CONT
+4. **Generadores de tráfico** por tipo de T-CONT
+5. **Recolección de métricas** y generación de gráficos
 
 ---
 
-## Estructura de archivos esperada
+## ESPECIFICACIONES TÉCNICAS GPON (ITU-T G.984)
+
+### Parámetros reales de GPON (INVESTIGAR Y VERIFICAR)
 
 ```
-pon-dba-sim/
-├── src/
-│   ├── OLT.ned          # Módulo OLT (compuesto)
-│   ├── OLT.h
-│   ├── OLT.cc
-│   ├── ONU.ned          # Módulo ONU (compuesto)
-│   ├── ONU.h
-│   ├── ONU.cc
-│   ├── Splitter.ned     # Splitter pasivo (solo retransmite)
-│   ├── Splitter.h
-│   ├── Splitter.cc
-│   ├── DBAAlgorithm.h       # Interfaz base para algoritmos DBA
-│   ├── IPACT.h               # Algoritmo 1: IPACT
-│   ├── IPACT.cc
-│   ├── QoSDBA.h              # Algoritmo 2: DBA con prioridad QoS
-│   ├── QoSDBA.cc
-│   ├── TrafficGenerator.h    # Base class para generadores
-│   ├── eMBBTrafficGen.h      # Generador eMBB
-│   ├── eMBBTrafficGen.cc
-│   ├── URLLCTrafficGen.h     # Generador URLLC
-│   ├── URLLCTrafficGen.cc
-│   ├── mMTCTrafficGen.h      # Generador mMTC
-│   ├── mMTCTrafficGen.cc
-│   ├── PONMessages.msg       # Definición de mensajes (REPORT, GRANT, DATA)
-│   └── PONNetwork.ned        # Red completa parametrizable
-├── simulations/
-│   ├── omnetpp.ini            # Configuración de escenarios
-│   └── run_all.sh             # Script para correr todos los escenarios
+Downstream: 2.488 Gbps
+Upstream:   1.244 Gbps
+Trama GTC:  125 μs (8000 tramas por segundo)
+Alcance:    hasta 20 km (lógico), 60 km (físico con extensión)
+Split ratio: 1:32 o 1:64 (usar 1:32 para nuestro caso)
+Encapsulación: GEM (GPON Encapsulation Method)
+```
+
+### Los 5 tipos de T-CONT en GPON
+
+GPON clasifica el tráfico usando **T-CONTs (Transmission Containers)**. Cada ONU puede tener uno o más T-CONTs. Los 5 tipos son:
+
+| Tipo | Nombre | Asignación | Descripción | Ejemplo de uso |
+|------|--------|------------|-------------|----------------|
+| T-CONT 1 | Fixed bandwidth | Fija (CBR) | Bandwidth reservado permanentemente, siempre disponible | VoIP, videoconferencia, TDM |
+| T-CONT 2 | Assured bandwidth | Garantizada | Bandwidth garantizado pero asignado dinámicamente | Video streaming, datos críticos |
+| T-CONT 3 | Assured + non-assured | Mínimo garantizado + extra si hay disponible | Parte garantizada, parte best-effort | Navegación web premium |
+| T-CONT 4 | Best effort | Solo si sobra | Sin garantía, usa lo que queda | Descargas, P2P, correo |
+| T-CONT 5 | Mixed | Combinación | Mezcla de todos los anteriores | Uso general |
+
+**DECISIÓN DEL EQUIPO:** Usar T-CONT 1, T-CONT 2 y T-CONT 4 (fijo, garantizado y best-effort) para tener 3 clases claramente diferenciadas. O usar los 5 si la profesora lo pide. VERIFICAR CON LA PROFESORA cuántos usar.
+
+### Mecanismo DBA en GPON (CENTRALIZADO, NO POLLING)
+
+En GPON el DBA es **centralizado y basado en Status Reporting (SR-DBA)**:
+
+1. La OLT envía un **BWmap (Bandwidth Map)** en cada trama downstream (cada 125 μs)
+2. El BWmap indica a cada T-CONT/ONU cuándo y cuánto puede transmitir en upstream
+3. Las ONUs envían **DBRu (Dynamic Bandwidth Report upstream)** dentro de sus tramas upstream, reportando el estado de sus buffers
+4. La OLT recibe los DBRu y recalcula el BWmap para la siguiente trama
+5. **NO hay polling individual** — el BWmap es broadcast y los reportes van embebidos en el tráfico upstream
+
+Diferencia clave con EPON/IPACT:
+- EPON/IPACT: la OLT hace polling individual ONU por ONU (ida y vuelta por cada ONU)
+- GPON: la OLT manda un BWmap broadcast y recibe reportes embebidos (más eficiente)
+
+---
+
+## ESTRUCTURA DEL SIMULADOR (Python puro)
+
+```
+gpon-dba-sim/
+├── simulator/
+│   ├── __init__.py
+│   ├── engine.py           # Motor de eventos discretos (cola de eventos, loop principal)
+│   ├── event.py            # Clase Event con timestamp, tipo, datos
+│   ├── gpon_network.py     # Red GPON: OLT, Splitter, ONUs, canal
+│   ├── olt.py              # OLT con motor DBA, generación de BWmap
+│   ├── onu.py              # ONU con T-CONTs, buffers, generación de tráfico
+│   ├── dba_basic.py        # Algoritmo DBA básico (proporcional sin QoS)
+│   ├── dba_qos.py          # Algoritmo DBA con diferenciación por T-CONT
+│   ├── traffic.py          # Generadores de tráfico por tipo de T-CONT
+│   ├── channel.py          # Canal óptico con delay de propagación
+│   └── metrics.py          # Recolección de estadísticas
 ├── analysis/
-│   ├── analyze.py             # Script Python para procesar resultados
-│   ├── export_results.sh      # Script para exportar .vec/.sca a CSV
-│   └── requirements.txt      # pandas, matplotlib, numpy, scipy
-├── package.ned                # Package definition
+│   ├── analyze.py          # Procesamiento de resultados y gráficos
+│   └── requirements.txt    # matplotlib, numpy, scipy, pandas
+├── configs/
+│   ├── default.json        # Parámetros por defecto de GPON
+│   └── scenarios.json      # Escenarios experimentales
+├── results/                # Resultados de las corridas (CSV)
+├── figures/                # Gráficos generados
+├── main.py                 # Punto de entrada principal
+├── run_experiments.py      # Ejecuta todos los escenarios
 └── README.md
 ```
 
 ---
 
-## Especificaciones técnicas detalladas
+## IMPLEMENTACIÓN DETALLADA
 
-### Mensajes (PONMessages.msg)
+### 1. Motor de eventos discretos (engine.py)
 
-```
-// OMNeT++ message definitions
-packet DataPacket {
-    int sourceONU;
-    int trafficClass;      // 0=eMBB, 1=URLLC, 2=mMTC
-    simtime_t creationTime; // para calcular latencia
-    simtime_t deadline;     // solo URLLC, -1 para otros
-    int dataSize @unit(byte);
-}
+```python
+import heapq
+from dataclasses import dataclass, field
+from typing import Any
 
-message ReportMessage {
-    int sourceONU;
-    int queueSize_eMBB @unit(byte);
-    int queueSize_URLLC @unit(byte);
-    int queueSize_mMTC @unit(byte);
-}
+@dataclass(order=True)
+class Event:
+    time: float
+    priority: int = field(compare=True, default=0)
+    event_type: str = field(compare=False, default="")
+    data: Any = field(compare=False, default=None)
 
-message GrantMessage {
-    int destONU;
-    simtime_t startTime;
-    int grantSize_eMBB @unit(byte);
-    int grantSize_URLLC @unit(byte);
-    int grantSize_mMTC @unit(byte);
-}
-```
+class SimulationEngine:
+    def __init__(self):
+        self.event_queue = []  # min-heap ordenado por tiempo
+        self.current_time = 0.0
+        self.event_handlers = {}  # tipo -> función handler
 
-### Parámetros de los generadores de tráfico
+    def schedule_event(self, time, event_type, data=None, priority=0):
+        event = Event(time=time, priority=priority, event_type=event_type, data=data)
+        heapq.heappush(self.event_queue, event)
 
-| Parámetro | eMBB | URLLC | mMTC |
-|-----------|------|-------|------|
-| Distribución inter-arrival | Pareto (self-similar) | Poisson (exponencial) | Periódico + jitter |
-| Tamaño paquete | 1000-1500 bytes | 32-256 bytes | 20-200 bytes |
-| Tasa media | Configurable (50-200 Mbps) | Configurable (1-10 Mbps) | Configurable (0.1-1 Mbps) |
-| Deadline | No (-1) | 250 μs | No (-1) |
+    def register_handler(self, event_type, handler_fn):
+        self.event_handlers[event_type] = handler_fn
 
-### Algoritmo 1: IPACT (Interleaved Polling with Adaptive Cycle Time)
-- La OLT encuesta (poll) cada ONU secuencialmente
-- Cada ONU reporta sus bytes pendientes (total, sin diferenciar clase)
-- La OLT asigna un grant proporcional al reporte, con un máximo por ONU (max grant)
-- No hay diferenciación de QoS — todos los paquetes se tratan igual
-- Referencia: paper de Kramer & Mukherjee (2002)
+    def run(self, until):
+        while self.event_queue:
+            event = heapq.heappop(self.event_queue)
+            if event.time > until:
+                break
+            self.current_time = event.time
+            handler = self.event_handlers.get(event.event_type)
+            if handler:
+                handler(event)
 
-### Algoritmo 2: QoS-DBA (Priority-based with WFQ)
-- La OLT recibe reportes con detalle por clase (3 valores)
-- Paso 1: asignar bandwidth a TODAS las colas URLLC primero (prioridad estricta)
-- Paso 2: repartir el bandwidth restante entre eMBB y mMTC usando Weighted Fair Queuing (pesos configurables, ej: eMBB=70%, mMTC=30%)
-- Cada ONU recibe un grant detallado por clase
-
-### Parámetros de red (configurables en omnetpp.ini)
-
-```ini
-# Topología
-**.numONUs = 16                    # Número de ONUs (variar: 16, 32)
-**.fiberLength = 20km              # Largo fibra alimentadora
-**.splitterRatio = 16              # Ratio del splitter
-
-# Canal
-**.dataRate = 1Gbps                # Velocidad upstream (simplificado)
-**.propagationDelay = 5us/km       # Delay de propagación en fibra
-
-# DBA
-**.dbaAlgorithm = "IPACT"          # o "QoSDBA"
-**.maxGrantSize = 64000B           # Grant máximo por ONU por ciclo
-**.pollingCycleTime = 2ms          # Tiempo máximo de ciclo de polling
-**.guardTime = 1us                 # Tiempo de guarda entre slots
-
-# Buffers ONU
-**.bufferSize_eMBB = 1MB
-**.bufferSize_URLLC = 100KB
-**.bufferSize_mMTC = 500KB
-
-# Tráfico (ajustar para variar carga)
-**.embbRate = 100Mbps
-**.urllcRate = 5Mbps
-**.mmtcRate = 0.5Mbps
-
-# Simulación
-sim-time-limit = 10s
-warmup-period = 1s
-repeat = 10
-seed-set = ${repetition}
+    @property
+    def now(self):
+        return self.current_time
 ```
 
-### Métricas a registrar (usando cOutVector y recordScalar)
+### 2. Modelo OLT con DBA centralizado (olt.py)
 
-Por cada ONU y por cada clase de servicio:
-- **Latencia upstream**: `simTime() - packet->getCreationTime()`
-- **Throughput**: bytes transmitidos exitosamente / tiempo de simulación
-- **Jitter**: variación de latencia entre paquetes consecutivos
-- **Tasa de pérdida**: paquetes perdidos (buffer overflow + deadline expired) / paquetes generados
-- **Utilización del canal**: tiempo que el canal está ocupado / tiempo total
+La OLT debe:
+- Cada 125 μs generar un BWmap (bandwidth map)
+- Recibir DBRu (reportes) de las ONUs
+- Ejecutar el algoritmo DBA para calcular el siguiente BWmap
+- Registrar métricas (paquetes recibidos, latencia, throughput)
 
-### Escenarios a simular (como Config sections en omnetpp.ini)
+```python
+class OLT:
+    def __init__(self, engine, num_onus, dba_algorithm):
+        self.engine = engine
+        self.num_onus = num_onus
+        self.dba = dba_algorithm
+        self.frame_duration = 125e-6  # 125 μs por trama GTC
+        self.upstream_rate = 1.244e9  # 1.244 Gbps upstream
+        self.upstream_capacity_per_frame = int(self.upstream_rate * self.frame_duration / 8)  # bytes por trama
+        # Estado
+        self.onu_reports = {}  # último reporte de cada ONU
+        self.metrics = MetricsCollector()
 
-```ini
-[Config IPACT_16ONU]
-**.dbaAlgorithm = "IPACT"
-**.numONUs = 16
-**.embbRate = ${load=50, 100, 150, 200}Mbps  # Variar carga
+    def generate_bwmap(self, event):
+        """Cada 125 μs: calcula BWmap basado en reportes y algoritmo DBA"""
+        bwmap = self.dba.allocate(
+            onu_reports=self.onu_reports,
+            total_capacity=self.upstream_capacity_per_frame,
+            num_onus=self.num_onus
+        )
+        # Enviar BWmap a todas las ONUs (broadcast)
+        for onu_id, allocation in bwmap.items():
+            self.engine.schedule_event(
+                time=self.engine.now + self.propagation_delay,
+                event_type="onu_receive_bwmap",
+                data={"onu_id": onu_id, "allocation": allocation}
+            )
+        # Programar siguiente BWmap
+        self.engine.schedule_event(
+            time=self.engine.now + self.frame_duration,
+            event_type="olt_generate_bwmap"
+        )
 
-[Config QoSDBA_16ONU]
-**.dbaAlgorithm = "QoSDBA"
-**.numONUs = 16
-**.embbRate = ${load=50, 100, 150, 200}Mbps
+    def receive_data(self, event):
+        """Recibe paquete de datos de una ONU"""
+        packet = event.data
+        latency = self.engine.now - packet["creation_time"]
+        self.metrics.record_latency(packet["tcont_type"], latency)
+        self.metrics.record_packet_received(packet["tcont_type"], packet["size"])
 
-[Config IPACT_32ONU]
-**.dbaAlgorithm = "IPACT"
-**.numONUs = 32
-**.embbRate = ${load=50, 100, 150, 200}Mbps
+    def receive_report(self, event):
+        """Recibe DBRu de una ONU"""
+        report = event.data
+        self.onu_reports[report["onu_id"]] = report
+```
 
-[Config QoSDBA_32ONU]
-**.dbaAlgorithm = "QoSDBA"
-**.numONUs = 32
-**.embbRate = ${load=50, 100, 150, 200}Mbps
+### 3. Modelo ONU con T-CONTs (onu.py)
+
+Cada ONU tiene:
+- Múltiples T-CONTs (cada uno con su buffer/cola)
+- Generadores de tráfico por T-CONT
+- Lógica de transmisión cuando recibe BWmap
+
+```python
+class ONU:
+    def __init__(self, onu_id, engine, tcont_configs):
+        self.onu_id = onu_id
+        self.engine = engine
+        self.tconts = {}  # tipo -> TCont object
+        self.metrics = MetricsCollector()
+
+        for tc_config in tcont_configs:
+            self.tconts[tc_config["type"]] = TCont(
+                tcont_type=tc_config["type"],
+                buffer_size=tc_config["buffer_size"],
+                traffic_gen=tc_config["traffic_generator"]
+            )
+
+    def receive_bwmap(self, event):
+        """Recibe BWmap de la OLT, transmite según allocation"""
+        allocation = event.data["allocation"]
+        for tcont_type, granted_bytes in allocation.items():
+            if tcont_type in self.tconts:
+                packets = self.tconts[tcont_type].dequeue(granted_bytes)
+                for pkt in packets:
+                    self.engine.schedule_event(
+                        time=self.engine.now + self.transmission_time(pkt["size"]),
+                        event_type="olt_receive_data",
+                        data=pkt
+                    )
+        # Enviar DBRu (reporte de estado de buffers)
+        self.send_report()
+
+    def send_report(self):
+        """Enviar DBRu embebido en tráfico upstream"""
+        report = {
+            "onu_id": self.onu_id,
+            "queue_sizes": {t: tc.queue_size for t, tc in self.tconts.items()}
+        }
+        self.engine.schedule_event(
+            time=self.engine.now + self.propagation_delay,
+            event_type="olt_receive_report",
+            data=report
+        )
+
+    def generate_traffic(self, event):
+        """Genera tráfico según el tipo de T-CONT"""
+        tcont_type = event.data["tcont_type"]
+        tcont = self.tconts[tcont_type]
+        packet = tcont.traffic_gen.generate(self.engine.now)
+        dropped = tcont.enqueue(packet)
+        if dropped:
+            self.metrics.record_packet_dropped(tcont_type, packet["size"])
+        # Programar próxima generación
+        next_time = self.engine.now + tcont.traffic_gen.next_interval()
+        self.engine.schedule_event(
+            time=next_time,
+            event_type="onu_generate_traffic",
+            data={"onu_id": self.onu_id, "tcont_type": tcont_type}
+        )
+```
+
+### 4. Algoritmos DBA
+
+#### DBA Básico — Proporcional sin QoS (dba_basic.py)
+```python
+class BasicDBA:
+    """DBA que reparte proporcional al reporte, sin diferenciar T-CONT"""
+    def allocate(self, onu_reports, total_capacity, num_onus):
+        bwmap = {}
+        # Calcular total demandado
+        total_demanded = sum(
+            sum(report["queue_sizes"].values())
+            for report in onu_reports.values()
+        )
+        for onu_id, report in onu_reports.items():
+            onu_demand = sum(report["queue_sizes"].values())
+            if total_demanded > 0:
+                share = min(onu_demand, total_capacity * onu_demand / total_demanded)
+            else:
+                share = total_capacity / num_onus
+            # Repartir entre T-CONTs proporcionalmente
+            onu_total = sum(report["queue_sizes"].values())
+            bwmap[onu_id] = {}
+            for tcont_type, queue_size in report["queue_sizes"].items():
+                if onu_total > 0:
+                    bwmap[onu_id][tcont_type] = int(share * queue_size / onu_total)
+                else:
+                    bwmap[onu_id][tcont_type] = 0
+        return bwmap
+```
+
+#### DBA con QoS — Prioridad por T-CONT (dba_qos.py)
+```python
+class QoSDBA:
+    """DBA que respeta prioridades de T-CONT según ITU-T G.984"""
+    def allocate(self, onu_reports, total_capacity, num_onus):
+        bwmap = {onu_id: {} for onu_id in onu_reports}
+        remaining = total_capacity
+
+        # Paso 1: T-CONT 1 (Fixed) — asignación fija garantizada
+        for onu_id, report in onu_reports.items():
+            t1_demand = report["queue_sizes"].get("TCONT1", 0)
+            grant = min(t1_demand, self.fixed_bw_per_onu)
+            bwmap[onu_id]["TCONT1"] = grant
+            remaining -= grant
+
+        # Paso 2: T-CONT 2 (Assured) — bandwidth garantizado
+        for onu_id, report in onu_reports.items():
+            t2_demand = report["queue_sizes"].get("TCONT2", 0)
+            grant = min(t2_demand, self.assured_bw_per_onu, remaining // num_onus)
+            bwmap[onu_id]["TCONT2"] = grant
+            remaining -= grant
+
+        # Paso 3: T-CONT 3 (Assured + Non-assured) — mínimo + extra
+        # ... (si se usan 5 T-CONTs)
+
+        # Paso 4: T-CONT 4 (Best effort) — lo que sobra
+        total_t4_demand = sum(
+            report["queue_sizes"].get("TCONT4", 0)
+            for report in onu_reports.values()
+        )
+        for onu_id, report in onu_reports.items():
+            t4_demand = report["queue_sizes"].get("TCONT4", 0)
+            if total_t4_demand > 0 and remaining > 0:
+                grant = min(t4_demand, int(remaining * t4_demand / total_t4_demand))
+            else:
+                grant = 0
+            bwmap[onu_id]["TCONT4"] = grant
+
+        return bwmap
+```
+
+### 5. Generadores de tráfico (traffic.py)
+
+```python
+import random
+import math
+
+class FixedTrafficGen:
+    """T-CONT 1: tráfico CBR (Constant Bit Rate) — VoIP, TDM"""
+    def __init__(self, rate_bps, packet_size=160):
+        self.interval = packet_size * 8 / rate_bps  # intervalo entre paquetes
+        self.packet_size = packet_size
+
+    def next_interval(self):
+        return self.interval  # determinístico
+
+class AssuredTrafficGen:
+    """T-CONT 2: tráfico variable con tasa media garantizada"""
+    def __init__(self, mean_rate_bps, packet_size=1000):
+        self.mean_interval = packet_size * 8 / mean_rate_bps
+        self.packet_size = packet_size
+
+    def next_interval(self):
+        return random.expovariate(1.0 / self.mean_interval)  # Poisson
+
+class BestEffortTrafficGen:
+    """T-CONT 4: tráfico best-effort, ráfagas Pareto"""
+    def __init__(self, mean_rate_bps, packet_size=1400, pareto_alpha=1.5):
+        self.mean_interval = packet_size * 8 / mean_rate_bps
+        self.packet_size = packet_size
+        self.alpha = pareto_alpha
+
+    def next_interval(self):
+        # Pareto: heavy-tailed, genera ráfagas
+        return (random.paretovariate(self.alpha)) * self.mean_interval / (self.alpha / (self.alpha - 1))
 ```
 
 ---
 
-## Script de análisis (analysis/analyze.py)
+## PARÁMETROS DE GPON (configs/default.json)
 
-El script debe:
-1. Leer los archivos .sca y .vec generados por OMNeT++ (usar `omnetpp.scavetool export` para convertir a CSV, o parsear directamente)
-2. Generar los siguientes gráficos con Matplotlib:
-   - **Latencia promedio por clase de servicio** (barras agrupadas, IPACT vs QoS-DBA)
-   - **Latencia P99 URLLC vs carga** (curvas, con línea horizontal en 250μs como referencia)
-   - **Throughput agregado vs carga** (curvas por algoritmo)
-   - **CDF de latencia URLLC** (comparando IPACT vs QoS-DBA bajo carga alta)
-   - **Tasa de pérdida por clase** (barras agrupadas)
-3. Incluir intervalos de confianza del 95% (10 repeticiones)
-4. Guardar los gráficos como PNG de alta resolución (300 DPI)
+```json
+{
+    "gpon": {
+        "upstream_rate_gbps": 1.244,
+        "downstream_rate_gbps": 2.488,
+        "frame_duration_us": 125,
+        "num_onus": 32,
+        "fiber_length_km": 20,
+        "propagation_delay_us_per_km": 5,
+        "split_ratio": 32
+    },
+    "tconts": {
+        "TCONT1": {
+            "name": "Fixed (CBR)",
+            "rate_mbps": 1,
+            "packet_size_bytes": 160,
+            "buffer_size_bytes": 10000,
+            "traffic_type": "fixed"
+        },
+        "TCONT2": {
+            "name": "Assured",
+            "rate_mbps": 10,
+            "packet_size_bytes": 1000,
+            "buffer_size_bytes": 100000,
+            "traffic_type": "poisson"
+        },
+        "TCONT4": {
+            "name": "Best Effort",
+            "rate_mbps_per_onu": [10, 25, 50, 75, 100],
+            "packet_size_bytes": 1400,
+            "buffer_size_bytes": 1000000,
+            "traffic_type": "pareto",
+            "pareto_alpha": 1.5
+        }
+    },
+    "simulation": {
+        "duration_seconds": 10,
+        "warmup_seconds": 1,
+        "repetitions": 10,
+        "seed_base": 42
+    }
+}
+```
 
-### Script export_results.sh
+---
+
+## ESCENARIOS EXPERIMENTALES
+
+```json
+{
+    "scenarios": [
+        {
+            "name": "BasicDBA_32ONU",
+            "algorithm": "basic",
+            "num_onus": 32,
+            "tcont4_rate_mbps": [10, 25, 50, 75, 100]
+        },
+        {
+            "name": "QoSDBA_32ONU",
+            "algorithm": "qos",
+            "num_onus": 32,
+            "tcont4_rate_mbps": [10, 25, 50, 75, 100]
+        }
+    ]
+}
+```
+
+---
+
+## MÉTRICAS A REGISTRAR
+
+Por cada ONU y por cada tipo de T-CONT:
+- **Latencia**: tiempo desde creación del paquete hasta recepción en OLT
+- **Throughput**: bytes entregados exitosamente / tiempo
+- **Tasa de pérdida**: paquetes descartados por buffer overflow / total generados
+- **Jitter**: variación de latencia entre paquetes consecutivos
+- **Utilización del canal**: tiempo ocupado / tiempo total por trama
+
+---
+
+## GRÁFICOS A GENERAR (analysis/analyze.py)
+
+1. Latencia promedio por T-CONT (barras: BasicDBA vs QoS-DBA)
+2. Tasa de pérdida por T-CONT (barras, escala log)
+3. Throughput vs carga ofrecida (curvas)
+4. CDF de latencia por T-CONT bajo carga alta
+5. Heatmap de pérdida por T-CONT vs carga
+6. Serie temporal de latencia T-CONT 1 (scatter)
+7. Dashboard resumen (2x2 subplots)
+
+Estilo: serif font, colores consistentes, IC 95%, 300 DPI.
+
+---
+
+## INSTRUCCIONES DE EJECUCIÓN
 
 ```bash
-#!/bin/bash
-# Exportar todos los resultados a CSV para análisis en Python
-cd ../simulations/results
-for f in *.sca; do
-    opp_scavetool export -o "${f%.sca}.csv" -F CSV-S "$f"
-done
-for f in *.vec; do
-    opp_scavetool export -o "${f%.vec}_vec.csv" -F CSV-R "$f"
-done
-echo "Exportación completada."
-```
+# Instalar dependencias
+pip install matplotlib numpy scipy pandas
 
-### Especificación detallada de gráficos (analyze.py)
+# Correr un escenario
+python main.py --config configs/default.json --scenario BasicDBA_32ONU --load 50
 
-El script debe generar exactamente estos 7 gráficos, guardados en `analysis/figures/`:
+# Correr todos los escenarios
+python run_experiments.py
 
-#### Gráfico 1: `latency_avg_by_class.png`
-- Tipo: barras agrupadas (grouped bar chart)
-- Eje X: clase de servicio (eMBB, URLLC, mMTC)
-- Eje Y: latencia promedio upstream (μs)
-- Grupos: IPACT vs QoS-DBA
-- Barras de error: intervalo de confianza 95%
-- Carga fija: la más alta (200 Mbps eMBB)
-- Colores: azul para IPACT, rojo para QoS-DBA
-
-#### Gráfico 2: `latency_p99_urllc_vs_load.png`
-- Tipo: curvas (line plot)
-- Eje X: carga eMBB (50, 100, 150, 200 Mbps)
-- Eje Y: latencia P99 de URLLC (μs)
-- Dos curvas: IPACT y QoS-DBA
-- Línea horizontal punteada roja en 250 μs (deadline URLLC)
-- Banda sombreada: intervalo de confianza 95%
-- **Este es el gráfico más importante del proyecto**
-
-#### Gráfico 3: `throughput_vs_load.png`
-- Tipo: curvas
-- Eje X: carga ofrecida (normalizada, 0.3 a 0.9)
-- Eje Y: throughput agregado (Mbps)
-- Dos curvas por algoritmo
-- Línea diagonal punteada gris = throughput ideal (carga = throughput)
-
-#### Gráfico 4: `cdf_latency_urllc.png`
-- Tipo: CDF (Cumulative Distribution Function)
-- Eje X: latencia URLLC (μs)
-- Eje Y: probabilidad acumulada (0 a 1)
-- Dos curvas: IPACT vs QoS-DBA
-- Solo bajo carga alta (200 Mbps eMBB)
-- Línea vertical en 250 μs (deadline)
-- Escala X logarítmica si es necesario
-
-#### Gráfico 5: `packet_loss_by_class.png`
-- Tipo: barras agrupadas
-- Eje X: clase de servicio
-- Eje Y: tasa de pérdida (%)
-- IPACT vs QoS-DBA
-- Escala Y logarítmica (para ver diferencias en URLLC donde objetivo es <10⁻⁵)
-
-#### Gráfico 6: `latency_timeseries_urllc.png`
-- Tipo: scatter/line plot
-- Eje X: tiempo de simulación (s)
-- Eje Y: latencia por paquete URLLC (μs)
-- Dos subplots: IPACT arriba, QoS-DBA abajo
-- Línea horizontal en 250 μs
-- Solo una corrida representativa (para mostrar comportamiento temporal)
-
-#### Gráfico 7: `summary_dashboard.png`
-- Tipo: figura compuesta (2x2 subplots)
-- Subplot 1: latencia promedio por clase (barras)
-- Subplot 2: P99 URLLC vs carga (curvas)
-- Subplot 3: throughput vs carga (curvas)
-- Subplot 4: pérdida por clase (barras)
-- Título general: "Comparación IPACT vs QoS-DBA — Red PON con tráfico 5G"
-- **Este gráfico es para la presentación final (1 slide)**
-
-### Estilo visual de los gráficos
-- Usar `plt.style.use('seaborn-v0_8-whitegrid')` como base
-- Fuente: `plt.rcParams['font.family'] = 'serif'` (estilo paper IEEE)
-- Tamaño fuente ejes: 12pt, título: 14pt
-- Colores consistentes: IPACT = `#1f77b4` (azul), QoS-DBA = `#d62728` (rojo)
-- Colores por clase: eMBB = `#2ca02c` (verde), URLLC = `#d62728` (rojo), mMTC = `#ff7f0e` (naranja)
-- Leyenda siempre visible, fuera del área de datos si es posible
-- Grid suave con alpha=0.3
-- Guardar con `dpi=300, bbox_inches='tight'`
-- Cada gráfico debe tener título, labels de ejes con unidades, y leyenda
-
----
-
-## Visualización gráfica en OMNeT++ (GUI Qtenv)
-
-### Display strings en archivos NED
-
-Cada módulo debe tener un `@display` string para que se vea correctamente en la GUI animada (Qtenv). Esto es OBLIGATORIO para la demo en la presentación.
-
-#### PONNetwork.ned (red completa)
-```ned
-network PONNetwork {
-    parameters:
-        int numONUs = default(16);
-        @display("bgb=900,500");  // tamaño del canvas
-    submodules:
-        olt: OLT {
-            @display("p=100,250;i=device/server2;is=l");  // izquierda, ícono grande
-        }
-        splitter: Splitter {
-            @display("p=350,250;i=device/opticalswitch;is=n");
-        }
-        onu[numONUs]: ONU {
-            @display("p=600,50+400*index/numONUs;i=device/modem;is=s");  // distribuidas verticalmente
-        }
-    connections:
-        olt.ponPort <--> {delay=100us; datarate=1Gbps;} <--> splitter.oltPort;
-        for i=0..numONUs-1 {
-            splitter.onuPort[i] <--> {delay=10us; datarate=1Gbps;} <--> onu[i].ponPort;
-        }
-}
-```
-
-### Iconos a usar (built-in de OMNeT++)
-- OLT: `i=device/server2` (servidor grande) — color azul
-- Splitter: `i=device/opticalswitch` — color amarillo
-- ONU: `i=device/modem` — color verde
-- También se puede usar `i=abstract/router` o `i=device/terminal`
-- Tamaños: `is=l` (large), `is=n` (normal), `is=s` (small), `is=vs` (very small)
-
-### Colores de mensajes en movimiento
-Los mensajes deben tener colores distintos para que se diferencien visualmente en la animación:
-
-En los archivos .cc, al crear mensajes:
-```cpp
-// En DataPacket - color según clase de servicio
-DataPacket *pkt = new DataPacket("eMBB-data");
-pkt->setDisplayString("b=10,10,oval,green");   // eMBB = verde
-
-DataPacket *pkt = new DataPacket("URLLC-data");
-pkt->setDisplayString("b=10,10,oval,red");     // URLLC = rojo
-
-DataPacket *pkt = new DataPacket("mMTC-data");
-pkt->setDisplayString("b=10,10,oval,orange");  // mMTC = naranja
-
-// ReportMessage
-ReportMessage *report = new ReportMessage("REPORT");
-report->setDisplayString("b=8,8,rect,blue");   // Azul
-
-// GrantMessage
-GrantMessage *grant = new GrantMessage("GRANT");
-grant->setDisplayString("b=8,8,rect,cyan");    // Cyan
-```
-
-### Textos dinámicos en módulos (bubble y display string updates)
-
-En los módulos, actualizar el display string en runtime para mostrar estado:
-
-```cpp
-// En OLT::handleMessage() — mostrar algoritmo activo
-getDisplayString().setTagArg("t", 0, (std::string("DBA: ") + dbaAlgorithm).c_str());
-
-// En ONU::handleMessage() — mostrar ocupación del buffer
-char buf[64];
-sprintf(buf, "Q: %d/%d/%d B", queueSize_eMBB, queueSize_URLLC, queueSize_mMTC);
-getDisplayString().setTagArg("t", 0, buf);
-
-// Mostrar bubble cuando se descarta un paquete
-if (packetDropped) {
-    bubble("Packet dropped!");
-    getDisplayString().setTagArg("i2", 0, "status/excl");  // ícono de warning
-}
-
-// Mostrar bubble cuando URLLC cumple deadline
-if (urllcDeadlineMet) {
-    bubble("URLLC OK");
-}
-```
-
-### Animación del canal
-Para que se vean los paquetes moviéndose por la fibra (no solo aparecer), los canales deben tener delay configurado:
-```ned
-// Esto ya está en las connections, pero verificar que el delay sea visible
-// Un delay de 100us es muy corto para ver la animación. En el omnetpp.ini se puede
-// escalar el tiempo de animación:
-// **.animation-speed = 0.5
-```
-
-### Configuración de Qtenv en omnetpp.ini
-```ini
-[General]
-# Configuración visual para la GUI
-qtenv-default-config = IPACT_16ONU
-qtenv-default-run = 0
-
-# Velocidad de animación (ajustar para demo)
-**.animation-speed = 1
-**.animation-msgnames = true
-**.animation-methodcalls = false
+# Generar gráficos
+python analysis/analyze.py
 ```
 
 ---
 
-## Instrucciones para Claude Code
+## PRIORIDADES
 
-### Prioridades (en orden)
-1. **Que compile**: código C++ correcto para OMNeT++ 6.x, archivos NED válidos, mensajes .msg correctos
-2. **Que corra**: que la simulación se ejecute sin errores de runtime
-3. **Que se vea**: display strings en NED, colores de mensajes, textos de estado dinámicos, bubbles — la GUI Qtenv debe mostrar una red PON animada y visualmente clara
-4. **Que mida**: que registre las métricas correctamente en archivos .vec/.sca
-5. **Que compare**: que los 2 algoritmos DBA sean intercambiables por configuración
-6. **Que grafique**: que `analyze.py` genere los 7 gráficos PNG especificados con estilo IEEE paper
+1. **Que funcione**: el motor de eventos debe procesar eventos correctamente en orden
+2. **Que sea GPON real**: usar parámetros del estándar ITU-T G.984 (1.244 Gbps upstream, 125 μs por trama, T-CONTs)
+3. **Que sea DBA centralizado**: BWmap broadcast + DBRu embebido, NO polling individual
+4. **Que mida bien**: métricas por T-CONT con recolección correcta
+5. **Que genere gráficos**: 7 gráficos comparando BasicDBA vs QoS-DBA
 
-### Cosas importantes de OMNeT++ que debes saber
-- Los módulos heredan de `cSimpleModule` (módulos simples) o son `module` en NED (compuestos)
-- Los mensajes se definen en archivos `.msg` y OMNeT++ genera automáticamente las clases C++ con `opp_msgc`
-- `handleMessage(cMessage *msg)` es el método principal que procesa eventos
-- `scheduleAt(simtime_t, cMessage*)` programa un evento futuro (self-message)
-- `send(cMessage*, const char* gateName)` envía un mensaje por un gate
-- `cOutVector` registra series temporales, `recordScalar()` registra valores finales
-- `par("nombreParam")` lee parámetros del .ned/.ini
-- Los gates se conectan en el .ned con `<-->` (bidireccional) o `-->` (unidireccional)
-- Los canales tienen `delay` y `datarate` como propiedades
-- `simTime()` retorna el tiempo actual de simulación
-- Para vectores de módulos en NED: `onu[numONUs]: ONU;`
+## NO HACER
+- NO usar OMNeT++, SimPy, ni ningún framework de simulación
+- NO usar IPACT (es de EPON, no GPON)
+- NO llamar al tráfico eMBB/URLLC/mMTC — son categorías 5G, no GPON. Usar T-CONT 1/2/3/4/5
+- NO usar polling individual — GPON es centralizado
+- NO inventar parámetros — usar los de ITU-T G.984
 
-### Estilo de código
-- C++ moderno (C++17)
-- Comentarios en español
-- Nombres de variables/funciones en inglés (convención OMNeT++)
-- Cada clase en su propio .h/.cc
-- Usar `EV <<` para logging (no cout/printf)
-
-### NO hacer
-- No usar INET Framework (solo OMNeT++ base) — todo custom
-- No modelar la capa física óptica (potencia, BER, etc.)
-- No implementar downstream (solo upstream es relevante para DBA)
-- No usar features de OMNeT++ 5.x deprecated en 6.x
-
----
-
-## Resultado esperado
-
-Al terminar, debo poder:
-1. Abrir el proyecto en el IDE de OMNeT++
-2. Compilar sin errores con `opp_makemake -f --deep -O out && make -j$(nproc)`
-3. Correr cada Config section en modo terminal (`-u Cmdenv`)
-4. **Ver la animación en GUI** (`-u Qtenv`): OLT, splitter y ONUs con íconos, mensajes de colores moviéndose (verde=eMBB, rojo=URLLC, naranja=mMTC, azul=REPORT, cyan=GRANT), textos de estado en cada módulo, y bubbles cuando se descartan paquetes
-5. Obtener archivos .vec/.sca con resultados en `simulations/results/`
-6. Correr `analysis/export_results.sh` para convertir a CSV
-7. Correr `analysis/analyze.py` y obtener **7 gráficos PNG** en `analysis/figures/` listos para el informe y la presentación
-
-### Para la presentación necesito mostrar:
-- **Demo en vivo**: correr la simulación en Qtenv mostrando la animación de la red PON con mensajes de colores
-- **Gráfico dashboard** (summary_dashboard.png): 1 slide con 4 subplots comparando IPACT vs QoS-DBA
-- **Gráfico P99 URLLC vs carga**: el resultado clave que muestra que QoS-DBA protege el tráfico URLLC
-
-### Entorno de desarrollo
-- OMNeT++ 6.0.3 instalado en: `~/omnetpp-6.0.3/`
-- Proyecto en: `~/pon-dba-sim/`
-- Para compilar: `source ~/omnetpp-6.0.3/setenv && opp_makemake -f --deep -O out && make -j$(nproc)`
-- Para correr GUI: `./pon-dba-sim -u Qtenv`
-- Para correr batch: `./pon-dba-sim -u Cmdenv -c IPACT_16ONU -r 0..9`
-
-**Este es un proyecto universitario real con nota. La calidad del código, la visualización gráfica y la rigurosidad de la simulación importan.**
+## IMPORTANTE
+Este simulador debe ser 100% código propio. El motor de eventos, la red, los algoritmos, todo.
+La profesora es experta en PON y OMNeT++. Va a revisar que los conceptos sean correctos.
