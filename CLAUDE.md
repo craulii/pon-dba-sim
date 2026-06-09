@@ -412,7 +412,7 @@ class BestEffortTrafficGen:
         "duration_seconds": 10,
         "warmup_seconds": 1,
         "repetitions": 10,
-        "seed_base": 42
+        "seed_base": 67
     }
 }
 ```
