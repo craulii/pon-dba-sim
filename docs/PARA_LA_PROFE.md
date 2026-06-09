@@ -88,7 +88,11 @@ Capturan los tres comportamientos fundamentalmente distintos (CBR puro / garanti
 | Distribución | **CBR** (determinístico, 1.28 ms) | **Poisson** (media 1.6 ms) | **Pareto α=1.5** |
 | Inter-arrival | Fijo: 160×8/1.000.000 = 1,28 ms | Exponencial | Heavy-tailed |
 
-**T-CONT 1 en el simulador:** la OLT pre-reserva un slot por trama por ONU sin consultar el DBRu — ancho de banda fijo independiente de la carga. Esto es el comportamiento Fixed de G.984.3 §9.2.1.
+**T-CONT 1 en el simulador:** la OLT pre-reserva 160 bytes por trama por ONU sin consultar el DBRu — ancho de banda fijo independiente de la carga. Esto refleja el comportamiento Fixed de T-CONT 1.
+
+> **Nota — inconsistencia intencional:** la fuente genera 1 Mbps (1 paquete cada 1.28 ms) pero el DBA reserva 160 bytes/trama = 10.24 Mbps. En GPON real con GEM la OLT reservaría 16 bytes/trama y la ONU acumularía créditos. Como no implementamos GEM, simplificamos reservando un slot de paquete completo por trama. Esta simplificación es simétrica en ambos algoritmos.
+>
+> **Respuesta lista:** *"Reservamos un slot de paquete completo por trama como simplificación. En un modelo real con GEM fragmentaríamos los paquetes. La simplificación no afecta la comparación porque aplica igual a BasicDBA y QosDBA."*
 
 **T-CONT 2 — Poisson:** usamos proceso de Poisson como modelo simplificado para tráfico con tasa media garantizada, estándar en literatura académica de análisis de colas. Video real puede ser más bursty; el objetivo del proyecto es comparar algoritmos DBA, no modelar un codec específico.
 
@@ -102,7 +106,7 @@ Capturan los tres comportamientos fundamentalmente distintos (CBR puro / garanti
 
 IPACT (Interleaved Polling with Adaptive Cycle Time) es el protocolo de asignación de **EPON (IEEE 802.3ah)**. EPON y GPON son estándares distintos de organizaciones distintas (IEEE vs ITU-T). Usar IPACT para modelar GPON sería mezclar conceptos incompatibles.
 
-### SR-DBA (Status Reporting DBA) — G.984.3 §9.3
+### SR-DBA (Status Reporting DBA)
 
 | | IPACT (EPON) | SR-DBA (GPON) |
 |---|---|---|
@@ -124,7 +128,7 @@ t = 125 μs:  OLT ya calcula el siguiente BWmap (ciclos solapados)
 
 **BWmap:** se transmite en el PCBd (Physical Control Block downstream) de cada trama GTC. Indica a cada T-CONT cuándo y cuántos bytes puede transmitir.
 
-**DBRu:** embebido en el header del burst upstream (G.984.3 §9.3.2). Reporta bytes pendientes por T-CONT. La OLT siempre trabaja con información de ≥200 μs de antigüedad (1 RTT) — esto es inherente al sistema y correcto.
+**DBRu:** embebido en el burst upstream de la ONU. Reporta bytes pendientes por T-CONT. La OLT siempre trabaja con información de ≥200 μs de antigüedad — 100 μs de ida (OLT→ONU) más 100 μs de vuelta (ONU→OLT). Esto es inherente al sistema y correcto.
 
 ---
 

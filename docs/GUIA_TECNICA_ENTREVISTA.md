@@ -143,15 +143,23 @@ Central Office (CO)
 
 ```
 Tráfico:       CBR (Constant Bit Rate)
-Tasa:          1 Mbps
+Tasa fuente:   1 Mbps
 Paquete:       160 bytes
 Buffer:        10,000 bytes (~62 paquetes)
 Inter-arrival: DETERMINÍSTICO = 160 bytes × 8 bits / 1,000,000 bps = 1.28 ms
                → 1 paquete cada 10.24 tramas GTC
 
-En el BWmap:   La OLT pre-reserva 160 bytes/trama/ONU SIN consultar el DBRu
-               (comportamiento Fixed según G.984.3 §9.2.1)
+Reserva DBA:   160 bytes/trama/ONU (= 10.24 Mbps por ONU)
 ```
+
+> ⚠️ **Inconsistencia intencional — prepara esta respuesta:**
+>
+> La fuente genera 1 Mbps pero el DBA reserva 160 bytes/trama = **10.24 Mbps**.
+>
+> **Por qué:** T-CONT 1 (Fixed) reserva un slot por trama aunque esté vacío — ese es precisamente el costo del CBR en PON. En GPON real con GEM, la OLT reservaría exactamente 16 bytes/trama (= 1 Mbps × 125μs / 8) y la ONU acumularía créditos durante 10 tramas antes de enviar un paquete completo. Nuestro simulador no implementa GEM, así que simplificamos reservando un slot de paquete completo (160 bytes) por trama.
+>
+> **Respuesta preparada para la profesora:**
+> *"Como simplificación del modelo, reservamos un slot de paquete completo por trama para T-CONT 1, en lugar de implementar acumulación de créditos GEM. Esto sobreaprovisiona el ancho de banda reservado respecto a la fuente de 1 Mbps, pero no afecta la comparación entre algoritmos porque la simplificación es simétrica — BasicDBA y QosDBA operan sobre el mismo modelo."*
 
 **Sobre el paquete de 160 bytes:** G.711 VoIP: 64 kbps con muestras de 8 bits a 8 kHz. Con 20 ms de payload: 20ms × 8000 Hz × 1 byte = 160 bytes de audio. Overhead RTP(12) + UDP(8) + IP(20) = 40 bytes adicionales en la vida real; usamos 160 bytes como tamaño representativo de tráfico TDM/VoIP.
 
@@ -192,7 +200,7 @@ OLT → [GATE msg a ONU 2] → ONU 2 → ...
 Período de ciclo: crece linealmente con N → para 32 ONUs: ~6.4 ms
 ```
 
-**SR-DBA (ITU-T G.984.3 §9.3) — lo que implementamos:**
+**SR-DBA (Status Reporting DBA, definido en ITU-T G.984.3) — lo que implementamos:**
 ```
 OLT → [BWmap broadcast a TODAS las ONUs] → todas reciben en 100 μs
        ↓                                    ↓
@@ -231,7 +239,7 @@ En nuestro simulador simplificamos a: `{onu_id: {tcont_type: bytes_concedidos}}`
 
 ### DBRu (Dynamic Bandwidth Report upstream)
 
-Embebido en el header del burst upstream (G.984.3 §9.3.2). Reporta bytes pendientes por T-CONT. Hay un **stale report delay** inherente: la OLT siempre trabaja con información de ≥200 μs de antigüedad (1 RTT). Esto es correcto y esperado.
+Embebido en el burst upstream de la ONU. Reporta bytes pendientes por T-CONT. Hay un **stale report delay** inherente: la OLT siempre trabaja con información de ≥200 μs de antigüedad (1 RTT = 100 μs ida + 100 μs vuelta). Esto es correcto y esperado.
 
 ### Balance de capacidad por trama (QosDBA a 32 ONUs)
 
@@ -532,8 +540,16 @@ IPACT es un protocolo de EPON (IEEE 802.3ah), no de GPON. Son estándares distin
 **"¿Qué es el BWmap exactamente?"**  
 Se transmite en el PCBd (Physical Control Block downstream) de cada trama GTC, cada 125 μs. Contiene `Alloc-ID + StartTime + StopTime` para cada T-CONT activo. Todas las ONUs lo reciben simultáneamente y saben exactamente cuándo pueden transmitir sin colisionar con otras ONUs.
 
+**"¿Por qué reservan 160 bytes por trama si T-CONT 1 solo genera 1 Mbps?"**
+> Esta es la pregunta más probable de la profesora. La fuente genera 1 paquete de 160 bytes cada 1.28 ms (cada 10.24 tramas), pero el DBA reserva 160 bytes **cada** trama = 10.24 Mbps por ONU.
+>
+> *"Como simplificación del modelo, reservamos un slot de paquete completo por trama para T-CONT 1. En GPON real con GEM, la OLT reservaría 16 bytes por trama (= 1 Mbps × 125 μs / 8) y la ONU acumularía créditos durante 10 tramas antes de transmitir un paquete completo. Como nuestro simulador no implementa GEM, simplificamos reservando un slot del tamaño exacto del paquete. El resultado es correcto: T-CONT 1 siempre tiene espacio, la simplificación es simétrica en ambos algoritmos, y la comparación sigue siendo válida."*
+
+**"¿Por qué exactamente 200 μs de información 'vieja'?"**
+> *"Son 100 μs de ida — la OLT envía el BWmap y tarda 100 μs en llegar a la ONU — más 100 μs de vuelta — la ONU envía el DBRu y tarda 100 μs en llegar a la OLT. En total 1 RTT = 200 μs."*
+
 **"¿Qué es el DBRu?"**  
-Dynamic Bandwidth Report upstream. Embebido en el header del burst upstream (G.984.3 §9.3.2). Contiene los bytes pendientes por T-CONT. La OLT lo usa para el próximo cálculo de BWmap. Tiene un delay inherente de 1 RTT (200 μs) — la OLT siempre trabaja con información "vieja" de ≥200 μs.
+Dynamic Bandwidth Report upstream. Embebido en el burst upstream de la ONU. Contiene los bytes pendientes por T-CONT. La OLT lo usa para el próximo cálculo de BWmap. Tiene un delay inherente de 1 RTT = 200 μs — 100 μs de ida (OLT→ONU, propagación BWmap) más 100 μs de vuelta (ONU→OLT, propagación datos+DBRu). La OLT siempre trabaja con información de ≥200 μs de antigüedad.
 
 **"¿Por qué usan T-CONT 1, 2 y 4 y no todos los 5?"**  
 T-CONT 1, 2 y 4 representan los tres comportamientos fundamentalmente distintos: CBR puro (sin reporte), assured con garantía mínima, y best-effort sin garantía. T-CONT 3 es una mezcla de T-CONT 2 + best-effort extra; T-CONT 5 es combinación de todos. Con 1, 2 y 4 la diferencia de QoS entre algoritmos es máxima y más clara.
