@@ -4,10 +4,6 @@
 
 ---
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- SLIDE 1: PORTADA                                           -->
-<!-- ═══════════════════════════════════════════════════════════ -->
-
 # Slide 1 — Portada
 
 **Título:** Evaluación de Algoritmos DBA en Redes GPON bajo Tráfico Multi-Servicio
@@ -19,10 +15,6 @@
 **Curso:** TEL-341 Simulación de Redes · UTFSM · 2026
 
 ---
-
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- SLIDE 2: MOTIVACIÓN                                        -->
-<!-- ═══════════════════════════════════════════════════════════ -->
 
 # Slide 2 — Motivación y Problema
 
@@ -41,9 +33,6 @@ Simultáneamente coexisten:
 
 ---
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- SLIDE 3: RED GPON                                          -->
-<!-- ═══════════════════════════════════════════════════════════ -->
 
 # Slide 3 — Red GPON ITU-T G.984
 
@@ -77,9 +66,6 @@ Central Office
 
 ---
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- SLIDE 4: T-CONTs                                           -->
-<!-- ═══════════════════════════════════════════════════════════ -->
 
 # Slide 4 — Clases de Tráfico: T-CONTs (ITU-T G.984.3)
 
@@ -99,9 +85,6 @@ Central Office
 
 ---
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- SLIDE 5: MECANISMO DBA                                     -->
-<!-- ═══════════════════════════════════════════════════════════ -->
 
 # Slide 5 — Mecanismo DBA: SR-DBA Centralizado
 
@@ -127,9 +110,6 @@ t = 125 μs:  OLT ya calculó el siguiente BWmap (solapado)
 
 ---
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- SLIDE 6: ALGORITMOS                                        -->
-<!-- ═══════════════════════════════════════════════════════════ -->
 
 # Slide 6 — Algoritmos Implementados
 
@@ -162,9 +142,6 @@ Paso 3 — T-CONT 4 (Best Effort): proporcional al sobrante
 
 ---
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- SLIDE 7: SIMULADOR                                         -->
-<!-- ═══════════════════════════════════════════════════════════ -->
 
 # Slide 7 — Simulador de Eventos Discretos Propio
 
@@ -194,9 +171,6 @@ Eventos procesados en simulación completa:
 
 ---
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- SLIDE 8: RESULTADO CLAVE                                   -->
-<!-- ═══════════════════════════════════════════════════════════ -->
 
 # Slide 8 — Resultado Clave: Latencia VoIP
 
@@ -216,13 +190,10 @@ No es degradación gradual — es colapso abrupto.
 |---|---|---|
 | 10 Mbps | 476 | **226** |
 | 75 Mbps | 476 | **226** |
-| 100 Mbps | **26.076** 💀 | **226** ✓ |
+| 100 Mbps | **26.076** | **226** |
 
 ---
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- SLIDE 9: TABLA COMPLETA DE RESULTADOS                      -->
-<!-- ═══════════════════════════════════════════════════════════ -->
 
 # Slide 9 — Comparación Completa a 100 Mbps/ONU
 
@@ -240,9 +211,6 @@ No es degradación gradual — es colapso abrupto.
 
 ---
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- SLIDE 10: DASHBOARD                                        -->
-<!-- ═══════════════════════════════════════════════════════════ -->
 
 # Slide 10 — Dashboard de Resultados
 
@@ -257,9 +225,6 @@ No es degradación gradual — es colapso abrupto.
 
 ---
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- SLIDE 11: ANÁLISIS                                         -->
-<!-- ═══════════════════════════════════════════════════════════ -->
 
 # Slide 11 — Análisis de Resultados
 
@@ -282,9 +247,6 @@ La capacidad del canal es fija. QosDBA no genera más ancho de banda — lo redi
 
 ---
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- SLIDE 12: CONCLUSIONES                                     -->
-<!-- ═══════════════════════════════════════════════════════════ -->
 
 # Slide 12 — Conclusiones
 
@@ -305,9 +267,6 @@ En una red GPON real con tráfico mixto, un algoritmo DBA sin diferenciación de
 
 ---
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- SLIDE 13: SIMPLIFICACIONES                                 -->
-<!-- ═══════════════════════════════════════════════════════════ -->
 
 # Slide 13 — Simplificaciones del Modelo
 
@@ -323,9 +282,6 @@ En una red GPON real con tráfico mixto, un algoritmo DBA sin diferenciación de
 
 ---
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- SLIDE 14: REFERENCIAS                                      -->
-<!-- ═══════════════════════════════════════════════════════════ -->
 
 # Slide 14 — Referencias
 

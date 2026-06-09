@@ -152,7 +152,7 @@ Inter-arrival: DETERMINÍSTICO = 160 bytes × 8 bits / 1,000,000 bps = 1.28 ms
 Reserva DBA:   160 bytes/trama/ONU (= 10.24 Mbps por ONU)
 ```
 
-> ⚠️ **Inconsistencia intencional — prepara esta respuesta:**
+> **Inconsistencia intencional — prepara esta respuesta:**
 >
 > La fuente genera 1 Mbps pero el DBA reserva 160 bytes/trama = **10.24 Mbps**.
 >
