@@ -2,7 +2,7 @@
 Punto de entrada principal del simulador GPON DBA.
 
 Uso:
-  python main.py --algorithm basic --load 50 --seed 42
+  python main.py --algorithm basic --load 50 --seed 6767
   python main.py --algorithm qos   --load 100 --num-onus 32 --duration 10
 """
 import argparse
@@ -130,7 +130,7 @@ def main():
     parser.add_argument("--num-onus",   type=int,   default=32)
     parser.add_argument("--duration",   type=float, default=10.0)
     parser.add_argument("--warmup",     type=float, default=1.0)
-    parser.add_argument("--seed",       type=int,   default=42)
+    parser.add_argument("--seed",       type=int,   default=6767)
     parser.add_argument("--output",     type=str,   default=None,
                         help="Archivo CSV de salida (opcional)")
     parser.add_argument("--verbose",    action="store_true")

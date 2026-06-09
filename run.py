@@ -144,7 +144,7 @@ def print_results_table(summary, num_onus, label=""):
 def run_quick_test():
     header()
     section("Prueba rápida")
-    print(f"\n  {c(C.GRAY, 'Parámetros:')} QosDBA · 100 Mbps · 8 ONUs · 2s sim · seed 42\n")
+    print(f"\n  {c(C.GRAY, 'Parámetros:')} QosDBA · 100 Mbps · 8 ONUs · 2s sim · seed 6767\n")
     base    = load_config("configs/default.json")
     config  = build_config(base, num_onus=8, tcont4_rate_bps=100_000_000,
                            duration=2.0, warmup=0.2)
@@ -159,7 +159,7 @@ def run_quick_test():
 
     def worker():
         nonlocal result
-        result = run_simulation(config, "qos", seed=42)
+        result = run_simulation(config, "qos", seed=6767)
         done.set()
 
     t = threading.Thread(target=worker, daemon=True)
@@ -211,7 +211,7 @@ def run_custom():
     num_onus= [8, 16, 32][onus_idx]
     dur     = [2.0, 5.0, 10.0][dur_idx]
     warmup  = min(1.0, dur * 0.1)
-    seed    = 42
+    seed    = 6767
 
     base   = load_config("configs/default.json")
     config = build_config(base, num_onus=num_onus, tcont4_rate_bps=load,
@@ -262,7 +262,7 @@ def run_full_experiments():
     base_cfg    = load_config("configs/default.json")
     sim_cfg     = base_cfg["simulation"]
     REPS        = sim_cfg.get("repetitions", 10)
-    SEED_BASE   = sim_cfg.get("seed_base", 42)
+    SEED_BASE   = sim_cfg.get("seed_base", 6767)
     DURATION    = sim_cfg.get("duration_s", 10.0)
     WARMUP      = sim_cfg.get("warmup_s", 1.0)
     N_SCENARIOS = len(scenarios)

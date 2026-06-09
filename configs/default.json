@@ -43,6 +43,6 @@
         "duration_s":   10.0,
         "warmup_s":     1.0,
         "repetitions":  10,
-        "seed_base":    42
+        "seed_base":    6767
     }
 }
