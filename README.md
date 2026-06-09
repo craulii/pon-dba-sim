@@ -50,6 +50,9 @@ Simulador de eventos discretos propio (100% Python, sin frameworks externos) de 
 
 ```
 /
+├── main.py                 # CLI: una corrida individual
+├── run_experiments.py      # Todos los escenarios (100 corridas)
+│
 ├── simulator/              # Motor DES y modelos de red
 │   ├── engine.py           # Motor eventos discretos (heapq)
 │   ├── olt.py              # OLT: BWmap cada 125 μs
@@ -62,18 +65,25 @@ Simulador de eventos discretos propio (100% Python, sin frameworks externos) de 
 │   └── collector.py        # Latencia, throughput, jitter, pérdida
 ├── analysis/
 │   └── analyze.py          # 7 gráficos PNG (estilo IEEE)
-├── configs/
+│
+├── configs/                # Parámetros de simulación
 │   ├── default.json        # Parámetros GPON ITU-T G.984
 │   └── scenarios.json      # 10 escenarios (5 cargas × 2 algoritmos)
 ├── results/
 │   └── all_results.csv     # Resultados consolidados (10 repeticiones)
 ├── figures/                # 7 gráficos PNG generados
-├── main.py                 # CLI: una corrida individual
-├── run_experiments.py      # Todos los escenarios (100 corridas)
-├── DOCUMENTACION_TECNICA.md
-├── INFORME_ESTADO.md
-├── Parte 1/                # Presentación inicial del proyecto
-└── Parte 2/                # Informe de avances + presentación
+│
+├── docs/                   # Documentación del proyecto
+│   ├── INFORME_FINAL.md        # Informe final (base para PPT)
+│   ├── ANALISIS_RESULTADOS.md  # Análisis detallado de resultados
+│   ├── DOCUMENTACION_TECNICA.md
+│   ├── GUIA_TECNICA_ENTREVISTA.md
+│   ├── PARA_LA_PROFE.md
+│   └── INFORME_ESTADO.md
+│
+└── entregas/               # Entregables académicos
+    ├── Parte_1/            # Definición del proyecto
+    └── Parte_2/            # Informe y presentación de avances
 ```
 
 ---
