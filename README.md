@@ -10,7 +10,7 @@ Universidad Técnica Federico Santa María (UTFSM) · TEL-341 Simulación de Red
 Simulador de eventos discretos propio (100% Python, sin frameworks externos) de una red **GPON** según el estándar **ITU-T G.984**, que compara dos algoritmos de asignación dinámica de ancho de banda (DBA):
 
 - **BasicDBA** — reparto proporcional sin diferenciación de T-CONT
-- **QosDBA** — prioridad estricta por tipo de T-CONT según ITU-T G.984.3
+- **QosDBA** — algoritmo propio de prioridades inspirado en la jerarquía de T-CONTs de GPON (ITU-T G.984.3 define los tipos, no el algoritmo)
 
 **Por qué Python puro y no OMNeT++:** el simulador anterior usaba OMNeT++ con conceptos de EPON (IPACT) y clases de tráfico 5G (eMBB/URLLC/mMTC) que no corresponden al estándar GPON. Este simulador implementa correctamente GPON desde cero.
 

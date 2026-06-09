@@ -277,7 +277,7 @@ A 100 Mbps/ONU de T-CONT 4: la cola T4 se llena (2 MB). T-CONT 1 tiene solo 160 
 Proporción de T-CONT 1 = 160 / (2,000,000 + 5,000 + 160) ≈ 0.008%  
 Grant T-CONT 1 = int(607 × 0.008%) = int(0.048) = **0 bytes** → starvation → 25 ms de latencia.
 
-### QosDBA — Prioridad estricta por T-CONT (ITU-T G.984.3 §9.2)
+### QosDBA — Algoritmo propio inspirado en la jerarquía de T-CONTs de GPON
 
 **Paso a paso:**
 

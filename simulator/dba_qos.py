@@ -1,7 +1,9 @@
 """
-DBA con QoS — prioridad estricta por tipo de T-CONT (ITU-T G.984.3).
+DBA con QoS — algoritmo propio de prioridades inspirado en la jerarquía
+de T-CONTs de GPON. ITU-T G.984.3 define los tipos de T-CONT y el mecanismo
+SR-DBA, pero no especifica un algoritmo de asignación obligatorio.
 
-Orden de asignación según estándar:
+Orden de asignación implementado:
   1. T-CONT 1 (Fixed):   pre-reservado, NO demand-based. Siempre asignado.
   2. T-CONT 2 (Assured): garantía mínima, demand-based.
   3. T-CONT 4 (Best effort): lo que sobra, proporcional a demanda.

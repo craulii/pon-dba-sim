@@ -570,7 +570,7 @@ T-CONT 1 latencia: 514 μs  (vs 163 μs en QosDBA)
 T-CONT 4 latencia: 4,648 μs
 ```
 
-### 7.2 QosDBA — Prioridad por T-CONT (ITU-T G.984.3)
+### 7.2 QosDBA — Algoritmo propio de prioridades por T-CONT
 
 **Archivo:** `simulator/dba_qos.py`
 
