@@ -1,0 +1,77 @@
+{
+    "gpon": {
+        "standard":                "XG-PON1 (ITU-T G.987)",
+        "upstream_rate_bps":       2488320000,
+        "downstream_rate_bps":     9953280000,
+        "frame_duration_s":        0.000125,
+        "bytes_per_frame":         38880,
+        "num_onus":                8,
+        "fiber_length_km":         20,
+        "prop_delay_s_per_km":     0.000005,
+        "guard_bytes_per_onu":     32,
+        "split_ratio":             8,
+        "comment":                 "XG-PON1 (G.987.2): upstream 2.48832 Gbps = 2x GPON G.984. bytes_per_frame = 2.48832e9*125e-6/8 = 38880 (2x los 19440 de Fase 2, misma trama de 125us). 8 ONUs todas identicas (requerimiento Fase 3). Topologia: 20km/100us one-way (200us RTT), igual que Fase 2, consistente con Nominal Differential Reach Class N1 de G.987.2."
+    },
+    "tconts": {
+        "1": {
+            "name":                    "Fixed (CBR) - VoIP/control",
+            "traffic":                 "cbr",
+            "rate_bps":                1000000,
+            "pkt_size":                160,
+            "buffer_bytes":            10000,
+            "fixed_bytes_per_frame":   160,
+            "comment":                 "Igual que Fase 2: VoIP es VoIP, no escala con la capacidad del enlace."
+        },
+        "2": {
+            "name":                    "Assured - Video Streaming",
+            "traffic":                 "poisson",
+            "rate_bps":                40000000,
+            "pkt_size":                1000,
+            "buffer_bytes":            200000,
+            "assured_bytes_per_frame": 1000,
+            "comment":                 "Tasa x8 vs Fase 2 (5->40 Mbps): mantiene 12.86% de la capacidad total (40*8/2488.32 = 5*32/1244.16). assured_bytes_per_frame=1000 (misma constante que Fase 2): 1000B/trama*8000tramas/s=64Mbps >> 40Mbps medio, mismo margen relativo que Fase 2 (64Mbps >> 5Mbps)."
+        },
+        "4": {
+            "name":                    "Best Effort - Data/Downloads",
+            "traffic":                 "pareto",
+            "rate_bps":                400000000,
+            "pkt_size":                1400,
+            "buffer_bytes":            2000000,
+            "pareto_alpha":            1.5,
+            "comment":                 "Variable segun escenario (ver scenarios_xgpon.json). Fair-share por ONU pasa de 38.88 Mbps (Fase2, 1244.16/32) a 311.04 Mbps (Fase3, 2488.32/8) -> factor x8. Barrido {10,25,50,75,100}->{80,200,400,600,800} Mbps/ONU preserva las mismas razones de sobrecarga (p.ej. 800 Mbps/ONU = 257% igual que 100 Mbps/ONU en Fase 2)."
+        }
+    },
+    "sla": {
+        "1": {
+            "max_delay_s": 0.002,
+            "name":        "T-CONT1 (VoIP/control)",
+            "comment":     "Cota dura solicitada explicitamente por la profesora: <= 2ms upstream."
+        },
+        "2": {
+            "max_delay_s": 0.020,
+            "name":        "T-CONT2 (Video)",
+            "comment":     "20ms: meta de proyecto, dentro del rango tipico 10-20ms para video interactivo/baja latencia. No es una norma ITU-T especifica de PON, es un objetivo razonable y justificado del proyecto."
+        },
+        "4": {
+            "max_delay_s": 0.500,
+            "name":        "T-CONT4 (Best Effort)",
+            "comment":     "500ms: cota laxa/diagnostica (best-effort no tiene SLA de latencia en ITU-T). El foco para T4 es latency_max_us y loss_rate, no el % de cumplimiento."
+        }
+    },
+    "ipact": {
+        "b_max_bytes":  38880,
+        "guard_time_s": 0.000001,
+        "comment":      "B_max=38880 bytes -> tiempo de transmision = 38880*8/2.48832e9 = 125us (=1 trama XGPON). guard_time_s=1us, valor tipico de guard band en EPON/IPACT (Kramer et al. 2002). Ciclo maximo (8 ONUs saturadas) = 8*(125+1)us = 1.008ms."
+    },
+    "giant": {
+        "si_max_frames": {"2": 8},
+        "si_min_frames": {"4": 32},
+        "comment":       "SImax=8 tramas (1ms) para T-CONT2 (GPA, asegurado): al menos un grant 'catch-up' por ONU cada 1ms. SImin=32 tramas (4ms) para T-CONT4 (SPA, no-asegurado), SImax << SImin (jerarquia GPA > SPA). Contadores T2 escalonados (onu_id % si_max) para evitar elegibilidad sincronizada."
+    },
+    "simulation": {
+        "duration_s":   10.0,
+        "warmup_s":     1.0,
+        "repetitions":  10,
+        "seed_base":    6767
+    }
+}

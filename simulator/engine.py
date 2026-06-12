@@ -14,6 +14,11 @@ EVT_ONU_GEN_TRAFFIC  = "ONU_GENERATE_TRAFFIC"  # generador de paquetes (self-sch
 EVT_OLT_RECV_DATA    = "OLT_RECEIVE_DATA"       # OLT recibe burst upstream de ONU
 EVT_OLT_RECV_REPORT  = "OLT_RECEIVE_REPORT"    # OLT recibe DBRu de ONU
 
+# --- Fase 3: IPACT (polling de ciclo variable, comparación XG-PON) ---
+EVT_OLT_SEND_GATE    = "OLT_SEND_GATE"         # OLT envía GATE (poll) a una ONU
+EVT_ONU_RECV_GATE    = "ONU_RECEIVE_GATE"      # ONU recibe GATE, transmite y reporta
+EVT_OLT_POLL_NEXT    = "OLT_POLL_NEXT"         # OLT avanza al siguiente ONU del ciclo
+
 
 @dataclass(order=True)
 class Event:

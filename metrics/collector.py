@@ -11,8 +11,11 @@ from typing import Dict, List, Optional
 
 class MetricsCollector:
 
-    def __init__(self, warmup_s: float = 1.0):
+    def __init__(self, warmup_s: float = 1.0,
+                 sla_bounds_s: Optional[Dict[int, float]] = None):
         self.warmup_s = warmup_s
+        # {tcont_type: max_delay_s} -- Fase 3, cotas SLA por tipo de T-CONT
+        self.sla_bounds_s: Dict = sla_bounds_s or {}
         # {(onu_id, tcont_type): [latencia_s, ...]}
         self._latencies:    Dict = defaultdict(list)
         self._jitters:      Dict = defaultdict(list)
@@ -21,6 +24,8 @@ class MetricsCollector:
         self._bytes_delivered: Dict = defaultdict(int)
         # utilización por trama: [(time, utilized_bytes), ...]
         self._frame_util: List = []
+        # ciclos de polling (Fase 3, IPACT): [(time, cycle_time_s), ...]
+        self._cycle_times: List = []
 
     # ------------------------------------------------------------------
     # Registro en tiempo de ejecución
@@ -47,6 +52,12 @@ class MetricsCollector:
         util = used_bytes / capacity_bytes if capacity_bytes > 0 else 0.0
         self._frame_util.append((sim_time, util))
 
+    def record_cycle_time(self, sim_time: float, cycle_time_s: float) -> None:
+        """Fase 3 (IPACT): registra la duración de un ciclo de polling completo."""
+        if sim_time < self.warmup_s:
+            return
+        self._cycle_times.append((sim_time, cycle_time_s))
+
     # ------------------------------------------------------------------
     # Cálculo de estadísticas al final
     # ------------------------------------------------------------------
@@ -72,6 +83,13 @@ class MetricsCollector:
             jits  = self._jitters.get(key, [])
             bdel  = self._bytes_delivered.get(key, 0)
 
+            sla_bound = self.sla_bounds_s.get(tcont_type)
+            if lats and sla_bound is not None:
+                n_compliant = sum(1 for l in lats if l <= sla_bound)
+                sla_pct = 100.0 * n_compliant / len(lats)
+            else:
+                sla_pct = None
+
             result[key] = {
                 "onu_id":         onu_id,
                 "tcont_type":     tcont_type,
@@ -79,9 +97,12 @@ class MetricsCollector:
                 "latency_mean_us":   statistics.mean(lats) * 1e6     if lats else 0.0,
                 "latency_p95_us":    self._percentile(lats, 95) * 1e6 if lats else 0.0,
                 "latency_p99_us":    self._percentile(lats, 99) * 1e6 if lats else 0.0,
+                "latency_max_us":    max(lats) * 1e6                 if lats else 0.0,
                 "jitter_mean_us":    statistics.mean(jits) * 1e6     if jits else 0.0,
                 "throughput_mbps":   (bdel * 8 / effective_duration / 1e6)
                                       if effective_duration > 0 else 0.0,
+                "sla_bound_us":      (sla_bound * 1e6) if sla_bound is not None else None,
+                "sla_compliance_pct": sla_pct,
             }
 
         # Utilización media del canal
@@ -90,6 +111,21 @@ class MetricsCollector:
             result["channel_utilization"] = statistics.mean(utils)
         else:
             result["channel_utilization"] = 0.0
+
+        # Estadísticas de duración de ciclo (Fase 3, IPACT)
+        if self._cycle_times:
+            cts = [c for _, c in self._cycle_times]
+            result["cycle_time_mean_us"] = statistics.mean(cts) * 1e6
+            result["cycle_time_p99_us"]  = self._percentile(cts, 99) * 1e6
+            result["cycle_time_min_us"]  = min(cts) * 1e6
+            result["cycle_time_max_us"]  = max(cts) * 1e6
+            result["cycle_time_samples"] = cts
+        else:
+            result["cycle_time_mean_us"] = 0.0
+            result["cycle_time_p99_us"]  = 0.0
+            result["cycle_time_min_us"]  = 0.0
+            result["cycle_time_max_us"]  = 0.0
+            result["cycle_time_samples"] = []
 
         return result
 
@@ -101,6 +137,12 @@ class MetricsCollector:
             onu_id, tcont_type = key
             jits  = self._jitters.get(key, [])
             bdel  = self._bytes_delivered.get(key, 0)
+
+            sla_bound = self.sla_bounds_s.get(tcont_type)
+            max_lat   = max(lats) * 1e6 if lats else 0.0
+            sla_pct   = (100.0 * sum(1 for l in lats if l <= sla_bound) / len(lats)
+                          if (lats and sla_bound is not None) else "")
+
             for i, lat in enumerate(lats):
                 row = {
                     "onu_id":      onu_id,
@@ -108,6 +150,9 @@ class MetricsCollector:
                     "latency_s":   lat,
                     "jitter_s":    jits[i - 1] if i > 0 and i - 1 < len(jits) else "",
                     "bytes_delivered": bdel,
+                    "latency_max_us":     max_lat,
+                    "sla_bound_us":       (sla_bound * 1e6) if sla_bound is not None else "",
+                    "sla_compliance_pct": sla_pct,
                 }
                 if extra_fields:
                     row.update(extra_fields)

@@ -1,5 +1,74 @@
 # CLAUDE.md — Simulador GPON DBA desde cero (SIN OMNeT++)
 
+## ESTADO ACTUAL DEL PROYECTO — FASE 3 (XG-PON)
+
+**Este documento describe el diseño original de Fase 2 (GPON G.984, 32
+ONUs, BasicDBA/QoSDBA) — ya implementado, entregado y NO se modifica**
+(`configs/default.json`, `dba_basic.py`, `dba_qos.py`, `scenarios.json`,
+`results/all_results.csv`, `figures/*.png` de Fase 2, `docs/PARA_LA_PROFE.md`,
+`docs/DOCUMENTACION_TECNICA.md`, `entregas/Parte_2/`).
+
+Tras la reunión del 9/6/2026, la profesora pivotó el proyecto a una **Fase
+3** (código + experimentos + documentación, ya completa):
+
+- **XG-PON1 (ITU-T G.987)** en vez de GPON G.984 — upstream 2.48832 Gbps,
+  38,880 bytes/trama (2× Fase 2), misma trama de 125 μs.
+- **8 ONUs idénticas** (en vez de 32).
+- **SLA-driven**: T-CONT1 (VoIP) ≤ 2 ms como meta explícita, nuevas métricas
+  `sla_compliance_pct` y `latency_max_us` por T-CONT.
+- **Se compara IPACT (polling de ciclo variable, adaptado de EPON,
+  declarado como tal) vs GIANT (GPA/SPA nativo XG-PON) vs QoSDBA
+  (referencia de Fase 2, re-parametrizado)** — esto REVIERTE la postura
+  "NO IPACT" de Fase 2 (ver más abajo): ahora es una comparación explícita
+  de benchmarking, no "modelar GPON con IPACT".
+
+Todo lo de Fase 3 es **aditivo**: archivos nuevos
+(`configs/xgpon.json`, `configs/scenarios_xgpon.json`,
+`simulator/dba_giant.py`, `simulator/dba_ipact.py`, `simulator/olt_ipact.py`,
+`main_xgpon.py`, `run_experiments_xgpon.py`, `analysis/analyze_xgpon.py`) +
+cambios aditivos en `simulator/engine.py` (+3 eventos), `simulator/onu.py`
+(+`on_receive_gate`), `metrics/collector.py` (+SLA/cycle_time).
+
+**Documentación de Fase 3** (leer en este orden):
+1. [`docs/PLAN_FASE3.md`](docs/PLAN_FASE3.md) — diseño completo y derivaciones
+2. [`docs/COMO_FUNCIONA_FASE3.md`](docs/COMO_FUNCIONA_FASE3.md) — explicación accesible/sin jerga, paso a paso
+3. [`docs/DOCUMENTACION_TECNICA_FASE3.md`](docs/DOCUMENTACION_TECNICA_FASE3.md) — referencia técnica formal (estándares, pseudocódigo, resultados)
+4. [`docs/PARA_LA_PROFE_FASE3.md`](docs/PARA_LA_PROFE_FASE3.md) — resumen ejecutivo + tabla de resultados clave
+5. [`docs/ESTADO_FASE3.md`](docs/ESTADO_FASE3.md) — checkpoint histórico de implementación
+
+Las secciones de abajo (CONTEXTO CRÍTICO en adelante) describen el diseño
+**original de Fase 2** y se mantienen como referencia histórica — varias de
+sus reglas (p.ej. "NO usar IPACT") fueron explícitamente revertidas en Fase
+3, según se documenta arriba y en `docs/PLAN_FASE3.md`.
+
+---
+
+## CONVENCIONES DE CÓDIGO (Fase 3 en adelante)
+
+Para todo código nuevo o modificado de aquí en adelante:
+
+- **Comentarios mínimos**: solo cuando expliquen un POR QUÉ no obvio
+  (decisión de diseño, workaround, invariante sutil). No describir QUÉ hace
+  el código línea por línea.
+- **Sin docstrings**: ni en módulos, ni en clases, ni en funciones. Si una
+  función necesita explicación, usar como máximo un comentario de una línea
+  arriba de la firma.
+- **Sin prints decorativos**: nada de separadores tipo `print("="*60)` o
+  `print("-"*80)` en scripts/CLI. Si se necesita una tabla, usar formato
+  simple (`f"{a:<10}{b:<10}"`) sin líneas de relleno.
+- **snake_case** para funciones, variables y nombres de archivo (ya es la
+  convención de Python/del proyecto — mantenerla).
+- **Código en español**: nombres de variables/funciones, mensajes de
+  `print`, y los pocos comentarios que queden, en español (los nombres ya
+  estandarizados en inglés, p.ej. `T-CONT`, `BWmap`, `DBA`, `EVT_*`, se
+  mantienen como están).
+
+Nota: el código existente de Fase 2 y Fase 3 (ya implementado y/o entregado)
+**no se refactoriza retroactivamente** solo para cumplir esto — aplica a
+trabajo nuevo de aquí en adelante.
+
+---
+
 ## CONTEXTO CRÍTICO
 
 La profesora del curso TEL-341 (Simulación de Redes, UTFSM) revisó nuestro trabajo anterior y nos dio las siguientes correcciones:

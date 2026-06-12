@@ -142,6 +142,60 @@ class ONU:
             },
         )
 
+    def on_receive_gate(self, evt) -> None:
+        """
+        Fase 3 (IPACT): recibe un GATE individual de la OLT con una
+        asignación {tcont_type: bytes} solo para ESTA ONU (a diferencia del
+        BWmap broadcast de SR-DBA). Lógica de transmisión idéntica a
+        on_receive_bwmap (duplicada intencionalmente: no se toca el camino
+        de Fase 2). Tras transmitir, envía siempre el REPORT (DBRu) — en
+        IPACT el reporte va embebido al final del burst de la ONU.
+        """
+        d = evt.data
+        if d["onu_id"] != self.onu_id:
+            return
+
+        allocation: Dict[int, int] = d["allocation"]  # {tcont_type: bytes_granted}
+
+        total_tx_bytes = 0
+        tx_time_acc    = 0.0
+
+        for tc_type, granted_bytes in allocation.items():
+            tcont = self.tconts.get(tc_type)
+            if tcont is None or granted_bytes <= 0:
+                continue
+
+            pkts = tcont.dequeue(granted_bytes)
+            for pkt in pkts:
+                tx_time   = (pkt.size * 8) / UPSTREAM_RATE_BPS
+                arrive_at = (self.engine.now
+                             + tx_time_acc
+                             + tx_time
+                             + self.prop_delay)
+                self.engine.schedule_at(
+                    time       = arrive_at,
+                    event_type = EVT_OLT_RECV_DATA,
+                    data       = {
+                        "onu_id":       self.onu_id,
+                        "tcont_type":   tc_type,
+                        "size":         pkt.size,
+                        "creation_time":pkt.creation_time,
+                    },
+                )
+                tx_time_acc    += tx_time
+                total_tx_bytes += pkt.size
+
+        # REPORT (DBRu): estado de colas tras la transmisión
+        queue_report = {tc: t.queue_bytes() for tc, t in self.tconts.items()}
+        self.engine.schedule(
+            delay      = self.prop_delay,
+            event_type = EVT_OLT_RECV_REPORT,
+            data       = {
+                "onu_id":      self.onu_id,
+                "queue_bytes": queue_report,
+            },
+        )
+
     # ------------------------------------------------------------------
     # Acceso a contadores de drops (para métricas finales)
     # ------------------------------------------------------------------

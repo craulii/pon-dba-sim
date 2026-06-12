@@ -1,0 +1,67 @@
+{
+    "scenarios": [
+        {
+            "name":           "IPACT_load200",
+            "algorithm":      "ipact",
+            "num_onus":       8,
+            "tcont4_rate_mbps": 200,
+            "description":    "IPACT (polling EPON-style), carga BE ~64% (subcargado)"
+        },
+        {
+            "name":           "IPACT_load400",
+            "algorithm":      "ipact",
+            "num_onus":       8,
+            "tcont4_rate_mbps": 400,
+            "description":    "IPACT, carga BE ~129% (al limite)"
+        },
+        {
+            "name":           "IPACT_load800",
+            "algorithm":      "ipact",
+            "num_onus":       8,
+            "tcont4_rate_mbps": 800,
+            "description":    "IPACT, carga BE ~257% (sobrecarga severa)"
+        },
+        {
+            "name":           "GIANT_load200",
+            "algorithm":      "giant",
+            "num_onus":       8,
+            "tcont4_rate_mbps": 200,
+            "description":    "GIANT (GPA/SPA, ITU-aligned), carga BE ~64%"
+        },
+        {
+            "name":           "GIANT_load400",
+            "algorithm":      "giant",
+            "num_onus":       8,
+            "tcont4_rate_mbps": 400,
+            "description":    "GIANT, carga BE ~129% (al limite)"
+        },
+        {
+            "name":           "GIANT_load800",
+            "algorithm":      "giant",
+            "num_onus":       8,
+            "tcont4_rate_mbps": 800,
+            "description":    "GIANT, carga BE ~257% (sobrecarga severa)"
+        },
+        {
+            "name":           "QoSDBA_load200",
+            "algorithm":      "qos",
+            "num_onus":       8,
+            "tcont4_rate_mbps": 200,
+            "description":    "QoSDBA (Fase 2 re-parametrizado XGPON), carga BE ~64%"
+        },
+        {
+            "name":           "QoSDBA_load400",
+            "algorithm":      "qos",
+            "num_onus":       8,
+            "tcont4_rate_mbps": 400,
+            "description":    "QoSDBA XGPON, carga BE ~129%"
+        },
+        {
+            "name":           "QoSDBA_load800",
+            "algorithm":      "qos",
+            "num_onus":       8,
+            "tcont4_rate_mbps": 800,
+            "description":    "QoSDBA XGPON, carga BE ~257% (sobrecarga severa)"
+        }
+    ]
+}

@@ -150,6 +150,78 @@ A carga máxima (100 Mbps/ONU × 32 ONUs = 3,200 Mbps demanda vs 1,244 Mbps capa
 
 ---
 
+---
+
+## Fase 3 — XG-PON, IPACT vs GIANT vs QoSDBA (SLA-driven)
+
+Tras la reunión del 9/6/2026, la profesora pivotó el proyecto a una **Fase
+3**, **aditiva** a todo lo anterior (nada de lo de arriba se modificó):
+**XG-PON1 (ITU-T G.987)**, **8 ONUs idénticas**, y comparación de **3
+algoritmos DBA** bajo una tabla de **SLA por T-CONT** (T-CONT1/VoIP ≤ 2 ms
+como meta principal).
+
+### Estándar implementado: XG-PON1 ITU-T G.987
+
+| Parámetro | Valor | Fuente |
+|-----------|-------|--------|
+| Upstream | 2.48832 Gbps (2× GPON G.984) | G.987.2 |
+| Downstream | 9.95328 Gbps (4× GPON G.984) | G.987.2 |
+| Trama GTC | 125 μs (igual que G.984.3) | G.987.3 |
+| Bytes/trama upstream | 38,880 bytes (2× Fase 2) | calculado |
+| Split ratio | 1:8 | requerimiento Fase 3 |
+| Alcance / RTT | 20 km / 200 μs (igual Fase 2) | G.987.2 Clase N1 |
+
+### 3 algoritmos DBA comparados
+
+| Algoritmo | Mecanismo | Archivo |
+|---|---|---|
+| **IPACT** | Polling round-robin de ciclo variable (adaptado de EPON, declarado) | `simulator/dba_ipact.py` + `simulator/olt_ipact.py` |
+| **GIANT** | GPA/SPA con contadores SImax/SImin (nativo XG-PON, broadcast BWmap 125μs) | `simulator/dba_giant.py` |
+| **QoSDBA** | Referencia de Fase 2, re-parametrizado a 8 ONUs/XG-PON | `simulator/dba_qos.py` (sin cambios de código) |
+
+### Cómo ejecutar
+
+```bash
+# Una corrida individual
+python3 main_xgpon.py --algorithm ipact --load 400 --verbose
+python3 main_xgpon.py --algorithm giant --load 800 --verbose
+python3 main_xgpon.py --algorithm qos   --load 200 --verbose
+
+# Los 9 escenarios (3 algoritmos x 3 cargas x 10 repeticiones, ~8-15 min)
+python3 run_experiments_xgpon.py
+
+# Generar los 6 gráficos
+python3 analysis/analyze_xgpon.py
+```
+
+Genera `results/xgpon_results.csv`, `results/xgpon_cycle_times.csv` y 6
+PNG en `figures/xgpon/`.
+
+### Resultado clave @ 800 Mbps/ONU (sobrecarga ~257%)
+
+| Métrica | IPACT | GIANT | QoSDBA |
+|---|---|---|---|
+| T-CONT1 SLA% (≤2ms) | **88.4%** | 100.0% | 100.0% |
+| T-CONT1 delay máximo (μs) | **2109.0** | 226.0 | 226.0 |
+| Throughput agregado (Mbps) | 2424.5 | 2343.3 | 1812.6 |
+
+**Conclusión:** GIANT y QoSDBA reservan T-CONT1 (VoIP) incondicionalmente
+cada trama → SLA de 2 ms cumplido siempre. IPACT asigna T1 según el último
+reporte (~1 ciclo de antigüedad); bajo saturación el ciclo se satura en
+1008 μs y el delay máximo de T1 supera los 2 ms → 88.4% de cumplimiento —
+exactamente la comparación SR-DBA vs. polling demand-based que pidió la
+profesora.
+
+### Documentación Fase 3
+
+- [`docs/COMO_FUNCIONA_FASE3.md`](docs/COMO_FUNCIONA_FASE3.md) — explicación accesible, paso a paso
+- [`docs/PARA_LA_PROFE_FASE3.md`](docs/PARA_LA_PROFE_FASE3.md) — resumen ejecutivo + resultados
+- [`docs/DOCUMENTACION_TECNICA_FASE3.md`](docs/DOCUMENTACION_TECNICA_FASE3.md) — referencia técnica completa
+- [`docs/PLAN_FASE3.md`](docs/PLAN_FASE3.md) — diseño original y derivaciones
+- [`entregas/Parte_3/`](entregas/Parte_3/) — índice de entrega
+
+---
+
 ## Contacto
 
 Equipo OmneTeam — David Retuerto, José Vega, Matías Perelli  
