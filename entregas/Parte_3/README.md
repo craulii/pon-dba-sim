@@ -22,23 +22,23 @@ modifica.
 - [`docs/PLAN_FASE3.md`](../../docs/PLAN_FASE3.md) — diseño original y
   derivaciones acordadas con el equipo.
 
-## Figuras (`figures/xgpon/`)
+## Figuras (`figures/`)
 
 | Archivo | Contenido |
 |---|---|
 | `sla_compliance_by_tcont.png` | Cumplimiento de SLA por T-CONT @ 800 Mbps/ONU (headline) |
 | `max_delay_tcont1_vs_load.png` | Delay máximo de T-CONT1 vs carga, con línea SLA de 2 ms |
 | `cycle_time_distribution.png` | Distribución del ciclo de polling IPACT vs trama fija 125 μs |
-| `throughput_vs_load_xgpon.png` | Throughput agregado vs carga, con referencia de capacidad |
+| `throughput_vs_load.png` | Throughput agregado vs carga, con referencia de capacidad |
 | `sla_compliance_vs_load.png` | Cumplimiento SLA de T-CONT1 vs carga |
-| `summary_dashboard_xgpon.png` | Dashboard 2×2 con los 4 gráficos clave |
+| `summary_dashboard.png` | Dashboard 2×2 con los 4 gráficos clave |
 
 ## Resultados (`results/`)
 
-- `xgpon_results.csv` — 9 escenarios (3 algoritmos × 3 cargas T-CONT4) × 3
+- `results.csv` — 9 escenarios (3 algoritmos × 3 cargas T-CONT4) × 3
   T-CONT, con media + IC95% sobre 10 repeticiones: latencia
   media/P95/P99/máx, jitter, throughput, loss rate, `sla_compliance_pct`.
-- `xgpon_cycle_times.csv` — muestras de duración de ciclo (solo escenarios
+- `cycle_times.csv` — muestras de duración de ciclo (solo escenarios
   IPACT), usadas en `cycle_time_distribution.png`.
 
 ---

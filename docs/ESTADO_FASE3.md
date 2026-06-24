@@ -10,8 +10,8 @@
 > - [`DOCUMENTACION_TECNICA_FASE3.md`](DOCUMENTACION_TECNICA_FASE3.md)
 >   (referencia técnica completa, incluye §13 con resultados)
 > - [`COMO_FUNCIONA_FASE3.md`](COMO_FUNCIONA_FASE3.md) (explicación accesible)
-> - `results/xgpon_results.csv`, `results/xgpon_cycle_times.csv`,
->   `figures/xgpon/*.png` (6 gráficos)
+> - `results/results.csv`, `results/cycle_times.csv`,
+>   `figures/*.png` (6 gráficos)
 >
 > El plan completo (diseño, derivaciones, código de referencia) está en
 > `docs/PLAN_FASE3.md`.
@@ -25,15 +25,15 @@ SLA-driven) **100% completada**:
 
 - **Código: 100% implementado y verificado** (tasks 1-9 del plan).
 - **Experimento completo corrido** (9 escenarios × 10 repeticiones × 10s),
-  6 gráficos generados en `figures/xgpon/`, tabla de "resultados clave" en
+  6 gráficos generados en `figures/`, tabla de "resultados clave" en
   `PARA_LA_PROFE_FASE3.md` §6 completada, y documentación técnica detallada
   escrita (`docs/DOCUMENTACION_TECNICA_FASE3.md`,
   `entregas/Parte_3/README.md`).
 - **Bug adicional encontrado y corregido durante el análisis final**:
   `cycle_time_samples` (segundos) se escribía sin convertir a la columna
-  `cycle_time_us` de `results/xgpon_cycle_times.csv` — dejaba
+  `cycle_time_us` de `results/cycle_times.csv` — dejaba
   `cycle_time_distribution.png` vacío. Corregido en
-  `run_experiments_xgpon.py` (ver `DOCUMENTACION_TECNICA_FASE3.md` §8.2).
+  `run_experiments.py` (ver `DOCUMENTACION_TECNICA_FASE3.md` §8.2).
 - **Hallazgo central confirmado** con la corrida completa: T-CONT1 bajo
   IPACT alcanza `sla_compliance_pct = 88.4%` (vs 100% en GIANT/QoSDBA) a
   carga ≥400 Mbps/ONU, con `latency_max_us = 2109.0 > 2000` (SLA) —
@@ -49,15 +49,15 @@ SLA-driven) **100% completada**:
 |---|---|---|
 | `simulator/engine.py` | ✅ modificado (aditivo) | +3 constantes: `EVT_OLT_SEND_GATE`, `EVT_ONU_RECV_GATE`, `EVT_OLT_POLL_NEXT` |
 | `metrics/collector.py` | ✅ modificado (aditivo, retrocompatible) | `sla_bounds_s`, `record_cycle_time()`, `latency_max_us`, `sla_compliance_pct`, `cycle_time_*` |
-| `configs/xgpon.json` | ✅ nuevo | XG-PON1 G.987, 8 ONUs, T-CONTs ×8, tabla `sla`, bloques `ipact`/`giant` |
+| `configs/default.json` | ✅ nuevo | XG-PON1 G.987, 8 ONUs, T-CONTs ×8, tabla `sla`, bloques `ipact`/`giant` |
 | `simulator/dba_giant.py` | ✅ nuevo, **bug corregido** | GPA/SPA con contadores SImax/SImin (ver §3) |
 | `simulator/onu.py` | ✅ modificado (aditivo) | nuevo método `on_receive_gate` (no toca `on_receive_bwmap`) |
 | `simulator/dba_ipact.py` | ✅ nuevo | `IpactDBA.allocate_onu()` |
 | `simulator/olt_ipact.py` | ✅ nuevo | `OLTPolling` (ciclo variable round-robin) |
-| `main_xgpon.py` | ✅ nuevo | CLI con `--algorithm {ipact,giant,qos}` |
-| `configs/scenarios_xgpon.json` | ✅ nuevo | 9 escenarios (3 algos × loads {200,400,800} Mbps/ONU) |
-| `run_experiments_xgpon.py` | ✅ nuevo | **paralelizado con multiprocessing** (9 procesos) |
-| `analysis/analyze_xgpon.py` | ✅ escrito, **NO ejecutado aún** | 6 gráficos, espera `results/xgpon_results.csv` |
+| `main.py` | ✅ nuevo | CLI con `--algorithm {ipact,giant,qos}` |
+| `configs/scenarios.json` | ✅ nuevo | 9 escenarios (3 algos × loads {200,400,800} Mbps/ONU) |
+| `run_experiments.py` | ✅ nuevo | **paralelizado con multiprocessing** (9 procesos) |
+| `analysis/analyze.py` | ✅ escrito, **NO ejecutado aún** | 6 gráficos, espera `results/results.csv` |
 | `docs/PLAN_FASE3.md` | ✅ escrito | plan completo guardado |
 | `docs/PARA_LA_PROFE_FASE3.md` | ✅ escrito (parcial) | falta tabla "Resultados clave" (§6, placeholders) |
 
@@ -132,26 +132,26 @@ sin `sla_bounds_s` sigue funcionando igual que en Fase 2.
 ### Paso 1 — Experimento completo (Task #10) ✅
 
 ```bash
-python3 run_experiments_xgpon.py
+python3 run_experiments.py
 ```
 
 Corrió los 9 escenarios × 10 repeticiones × 10s (paralelizado, 9 procesos).
-Generó `results/xgpon_results.csv` (27 filas) y
-`results/xgpon_cycle_times.csv` (716,731 muestras IPACT).
+Generó `results/results.csv` (27 filas) y
+`results/cycle_times.csv` (716,731 muestras IPACT).
 
 ### Paso 2 — 6 gráficos (Task #11) ✅
 
 ```bash
-python3 analysis/analyze_xgpon.py
+python3 analysis/analyze.py
 ```
 
-Generó los 6 PNG en `figures/xgpon/`. Durante esta corrida se encontró y
+Generó los 6 PNG en `figures/`. Durante esta corrida se encontró y
 corrigió el bug de unidades de `cycle_time_us` (ver §1).
 
 ### Paso 3 — `docs/PARA_LA_PROFE_FASE3.md` §6 ✅
 
 Tabla "Resultados clave" completada con los valores de
-`results/xgpon_results.csv` @ 800 Mbps/ONU.
+`results/results.csv` @ 800 Mbps/ONU.
 
 ### Paso 4 — `docs/DOCUMENTACION_TECNICA_FASE3.md` + `entregas/Parte_3/README.md` ✅
 
@@ -169,20 +169,20 @@ equipo).
  M metrics/collector.py
  M simulator/engine.py
  M simulator/onu.py
-?? analysis/analyze_xgpon.py
-?? configs/scenarios_xgpon.json
-?? configs/xgpon.json
+?? analysis/analyze.py
+?? configs/scenarios.json
+?? configs/default.json
 ?? docs/COMO_FUNCIONA_FASE3.md
 ?? docs/DOCUMENTACION_TECNICA_FASE3.md
 ?? docs/ESTADO_FASE3.md
 ?? docs/PARA_LA_PROFE_FASE3.md
 ?? docs/PLAN_FASE3.md
 ?? entregas/Parte_3/README.md
-?? figures/xgpon/*.png            (6 archivos)
-?? main_xgpon.py
-?? results/xgpon_cycle_times.csv
-?? results/xgpon_results.csv
-?? run_experiments_xgpon.py
+?? figures/*.png            (6 archivos)
+?? main.py
+?? results/cycle_times.csv
+?? results/results.csv
+?? run_experiments.py
 ?? simulator/dba_giant.py
 ?? simulator/dba_ipact.py
 ?? simulator/olt_ipact.py

@@ -1,48 +1,53 @@
-# Simulador GPON DBA — ITU-T G.984
+# Simulador XG-PON DBA — ITU-T G.987
 
-**Equipo OmneTeam** · David Retuerto · José Vega · Matías Perelli  
+**Equipo OmneTeam** · David Retuerto · José Vega · Matías Perelli
 Universidad Técnica Federico Santa María (UTFSM) · TEL-341 Simulación de Redes · 2026
 
 ---
 
 ## ¿Qué es este proyecto?
 
-Simulador de eventos discretos propio (100% Python, sin frameworks externos) de una red **GPON** según el estándar **ITU-T G.984**, que compara dos algoritmos de asignación dinámica de ancho de banda (DBA):
+Simulador de eventos discretos propio (100% Python, sin frameworks externos)
+de una red **XG-PON1** según el estándar **ITU-T G.987**, que compara 3
+algoritmos de asignación dinámica de ancho de banda (DBA) bajo un **SLA de
+latencia explícito** para tráfico de voz (T-CONT1 ≤ 2 ms):
 
-- **BasicDBA** — reparto proporcional sin diferenciación de T-CONT
-- **QosDBA** — algoritmo propio de prioridades inspirado en la jerarquía de T-CONTs de GPON (ITU-T G.984.3 define los tipos, no el algoritmo)
+- **IPACT** — polling round-robin de ciclo variable, adaptado de EPON (declarado como comparación, no como modelo de XG-PON)
+- **GIANT** — GPA/SPA con contadores SImax/SImin, nativo de GPON/XG-PON
+- **QoSDBA** — prioridad estricta T-CONT 1 > 2 > 4 (la referencia heredada de la Fase 2 del proyecto, reescalada a XG-PON)
 
-**Por qué Python puro y no OMNeT++:** el simulador anterior usaba OMNeT++ con conceptos de EPON (IPACT) y clases de tráfico 5G (eMBB/URLLC/mMTC) que no corresponden al estándar GPON. Este simulador implementa correctamente GPON desde cero.
+Este es el resultado de un pivote pedido por la profesora el 9/6/2026 sobre
+un simulador GPON anterior (ver [Legacy](#legacy--fases-1-y-2) abajo).
 
 ---
 
-## Estándar implementado: GPON ITU-T G.984
+## Estándar implementado: XG-PON1 ITU-T G.987
 
 | Parámetro | Valor | Fuente |
 |-----------|-------|--------|
-| Upstream | 1.244 Gbps (1,244,160,000 bps) | G.984.2 |
-| Downstream | 2.488 Gbps | G.984.2 |
-| Trama GTC | 125 μs (8,000 tramas/s) | G.984.3 |
-| Bytes/trama upstream | 19,440 bytes | calculado |
-| Split ratio | 1:32 | G.984.1 |
-| Alcance | 20 km | G.984.1 |
-| Delay propagación | 5 μs/km → 100 μs (20 km) | G.984.1 |
-| Guard band | 32 bytes/ONU | G.984.3 §8.2 |
+| Upstream | 2.48832 Gbps | G.987.2 |
+| Downstream | 9.95328 Gbps | G.987.2 |
+| Trama GTC | 125 μs (8,000 tramas/s) | G.987.3 |
+| Bytes/trama upstream | 38,880 bytes | calculado |
+| Split ratio | 1:8 | requerimiento del proyecto |
+| Alcance / RTT | 20 km / 200 μs | G.987.2 Clase N1 |
+| Guard band | 32 bytes/ONU | G.984.3 §8.2 (heredado) |
 
-### Tipos de T-CONT usados (ITU-T G.984.3)
+### T-CONTs simulados
 
-| T-CONT | Nombre | Asignación | Tráfico simulado | Distribución |
-|--------|--------|------------|-----------------|--------------|
-| T-CONT 1 | Fixed (CBR) | Pre-reservada, siempre | VoIP G.711 (1 Mbps, 160 B) | Determinístico |
-| T-CONT 2 | Assured | Garantizada, demand-based | Video streaming (5 Mbps, 1000 B) | Poisson |
-| T-CONT 4 | Best Effort | Lo que sobra | Datos masivos (variable, 1400 B) | Pareto α=1.5 |
+| T-CONT | Nombre | Tráfico simulado | Distribución | SLA (delay máx) |
+|--------|--------|-------------------|--------------|------------------|
+| T-CONT 1 | Fixed (CBR) | VoIP G.711 (1 Mbps, 160 B) | Determinístico | ≤ 2 ms |
+| T-CONT 2 | Assured | Video streaming (40 Mbps, 1000 B) | Poisson | ≤ 20 ms |
+| T-CONT 4 | Best Effort | Datos masivos (variable, 1400 B) | Pareto α=1.5 | ≤ 500 ms (diagnóstica) |
 
-### Mecanismo DBA: SR-DBA centralizado (NO polling IPACT)
+### 3 algoritmos DBA comparados
 
-- La OLT genera un **BWmap** cada 125 μs (broadcast a todas las ONUs)
-- Las ONUs envían **DBRu** embebido en su burst upstream
-- La OLT aplica el algoritmo DBA y calcula el siguiente BWmap
-- **No hay polling individual** — diferencia clave con EPON/IPACT
+| Algoritmo | Mecanismo | Archivo |
+|---|---|---|
+| **IPACT** | Polling round-robin de ciclo variable (adaptado de EPON, declarado) | `simulator/dba_ipact.py` + `simulator/olt_ipact.py` |
+| **GIANT** | GPA/SPA con contadores SImax/SImin (nativo XG-PON, broadcast BWmap 125μs) | `simulator/dba_giant.py` |
+| **QoSDBA** | Prioridad estricta T1 > T2 > T4 | `simulator/dba_qos.py` |
 
 ---
 
@@ -51,40 +56,42 @@ Simulador de eventos discretos propio (100% Python, sin frameworks externos) de 
 ```
 /
 ├── main.py                 # CLI: una corrida individual
-├── run_experiments.py      # Todos los escenarios (100 corridas)
+├── run_experiments.py      # Los 9 escenarios (3 algoritmos x 3 cargas x 10 repeticiones)
 │
-├── simulator/              # Motor DES y modelos de red
-│   ├── engine.py           # Motor eventos discretos (heapq)
-│   ├── olt.py              # OLT: BWmap cada 125 μs
-│   ├── onu.py              # ONU: T-CONTs, buffers, DBRu
-│   ├── tcont.py            # T-CONT: buffer FIFO, métricas
-│   ├── traffic.py          # CBR / Poisson / Pareto
-│   ├── dba_basic.py        # BasicDBA: proporcional sin QoS
-│   └── dba_qos.py          # QosDBA: prioridad T-CONT 1 → 2 → 4
+├── simulator/               # Motor DES y modelos de red
+│   ├── engine.py            # Motor de eventos discretos (heapq)
+│   ├── olt.py                # OLT broadcast (SR-DBA): BWmap cada 125 μs -- usado por GIANT/QoSDBA
+│   ├── olt_ipact.py          # OLT polling: GATE individual, ciclo variable -- usado por IPACT
+│   ├── onu.py                # ONU: T-CONTs, buffers, DBRu
+│   ├── tcont.py               # T-CONT: buffer FIFO, métricas
+│   ├── traffic.py             # CBR / Poisson / Pareto
+│   ├── dba_giant.py           # GIANT: GPA/SPA
+│   ├── dba_ipact.py           # IPACT: limited service por poll
+│   └── dba_qos.py             # QoSDBA: prioridad T-CONT 1 -> 2 -> 4
 ├── metrics/
-│   └── collector.py        # Latencia, throughput, jitter, pérdida
+│   └── collector.py          # Latencia, throughput, jitter, pérdida, SLA, cycle_time
 ├── analysis/
-│   └── analyze.py          # 7 gráficos PNG (estilo IEEE)
+│   └── analyze.py            # 6 gráficos PNG (estilo IEEE)
 │
-├── configs/                # Parámetros de simulación
-│   ├── default.json        # Parámetros GPON ITU-T G.984
-│   └── scenarios.json      # 10 escenarios (5 cargas × 2 algoritmos)
+├── configs/
+│   ├── default.json          # Parámetros XG-PON1 (G.987), T-CONTs, tabla SLA, IPACT/GIANT
+│   └── scenarios.json        # 9 escenarios (3 algoritmos x 3 cargas)
 ├── results/
-│   └── all_results.csv     # Resultados consolidados (10 repeticiones)
-├── figures/                # 7 gráficos PNG generados
+│   ├── results.csv            # Resultados consolidados
+│   └── cycle_times.csv        # Muestras de duración de ciclo (IPACT)
+├── figures/                   # 6 gráficos PNG generados
 │
-├── docs/                   # Documentación del proyecto
-│   ├── INFORME_FINAL.md        # Informe final (base para PPT)
-│   ├── ANALISIS_RESULTADOS.md  # Análisis detallado de resultados
-│   ├── DOCUMENTACION_TECNICA.md
-│   ├── GUIA_TECNICA_ENTREVISTA.md
-│   ├── PARA_LA_PROFE.md
-│   └── INFORME_ESTADO.md
+├── docs/                      # Documentación (ver tabla abajo)
+├── entregas/
+│   └── Parte_3/                # Índice de la entrega actual
 │
-└── entregas/               # Entregables académicos
-    ├── Parte_1/            # Definición del proyecto
-    └── Parte_2/            # Informe y presentación de avances
+└── legacy/                    # Fase 1 y Fase 2 archivadas -- ver sección Legacy
 ```
+
+Los módulos `simulator/engine.py`, `simulator/onu.py`, `simulator/tcont.py`,
+`simulator/traffic.py`, `simulator/olt.py`, `simulator/dba_qos.py` y
+`metrics/collector.py` son compartidos con la Fase 2 archivada en
+`legacy/fase2/` -- por eso viven en la raíz y no están duplicados ahí.
 
 ---
 
@@ -99,21 +106,22 @@ pip install matplotlib numpy scipy pandas
 ### Una corrida individual
 
 ```bash
-python3 main.py --algorithm qos --load 100 --num-onus 32 --seed 42 --verbose
-python3 main.py --algorithm basic --load 100 --num-onus 32 --seed 42 --verbose
+python3 main.py --algorithm ipact --load 400 --verbose
+python3 main.py --algorithm giant --load 800 --verbose
+python3 main.py --algorithm qos   --load 200 --verbose
 ```
 
-Opciones: `--algorithm [basic|qos]`, `--load` (Mbps T-CONT 4), `--num-onus`, `--duration`, `--warmup`, `--seed`.
+Opciones: `--algorithm [ipact|giant|qos]`, `--load` (Mbps T-CONT4 por ONU), `--num-onus`, `--duration`, `--warmup`, `--seed`.
 
-### Todos los escenarios (100 corridas, ~15 min)
+### Los 9 escenarios completos (~8-15 min)
 
 ```bash
 python3 run_experiments.py
 ```
 
-Genera `results/all_results.csv` con 10 escenarios × 3 T-CONTs, 10 repeticiones cada uno.
+Genera `results/results.csv` y `results/cycle_times.csv`.
 
-### Generar los 7 gráficos
+### Generar los 6 gráficos
 
 ```bash
 python3 analysis/analyze.py
@@ -123,81 +131,16 @@ Genera en `figures/`:
 
 | Archivo | Contenido |
 |---------|-----------|
-| `latency_avg_by_tcont.png` | Latencia media por T-CONT (barras) |
-| `latency_p99_tcont1_vs_load.png` | P99 VoIP vs carga — gráfico clave |
-| `loss_rate_by_tcont.png` | Tasa de pérdida (escala log) |
-| `throughput_vs_load.png` | Throughput por T-CONT y agregado |
-| `cdf_latency_tcont4.png` | CDF latencia T-CONT 1 VoIP |
-| `channel_utilization.png` | Utilización canal upstream vs carga |
-| `summary_dashboard.png` | Dashboard 2×2 para presentación |
+| `sla_compliance_by_tcont.png` | Cumplimiento SLA por T-CONT @ 800 Mbps/ONU — **gráfico principal** |
+| `max_delay_tcont1_vs_load.png` | Delay máximo T-CONT1 vs carga, línea SLA 2ms — **evidencia clave** |
+| `cycle_time_distribution.png` | Distribución del ciclo de polling IPACT vs trama fija |
+| `throughput_vs_load.png` | Throughput agregado vs carga |
+| `sla_compliance_vs_load.png` | Cumplimiento SLA T-CONT1 vs carga |
+| `summary_dashboard.png` | Dashboard 2×2 resumen |
 
 ---
 
-## Resultados clave
-
-A carga máxima (100 Mbps/ONU × 32 ONUs = 3,200 Mbps demanda vs 1,244 Mbps capacidad):
-
-| Métrica | BasicDBA | QosDBA |
-|---------|----------|--------|
-| T-CONT 1 latencia media | **25,437 μs** (VoIP destruido) | **164 μs** ✓ |
-| T-CONT 1 P99 | 26,076 μs | 226 μs |
-| T-CONT 2 latencia media | 4,411 μs | 401 μs |
-| T-CONT 4 latencia | 177,875 μs | 177,875 μs (igual, esperado) |
-| T-CONT 4 pérdida | 17.8% | 17.8% (igual, esperado) |
-| Utilización canal | ~100% | ~100% |
-
-**Conclusión:** QosDBA garantiza latencia constante de T-CONT 1 (VoIP) ≤ 226 μs P99 independiente de la carga. BasicDBA deja que el tráfico best-effort destruya el VoIP (25 ms a plena carga — inaceptable para telefonía, budget G.114 ≤ 150 ms extremo a extremo).
-
----
-
----
-
-## Fase 3 — XG-PON, IPACT vs GIANT vs QoSDBA (SLA-driven)
-
-Tras la reunión del 9/6/2026, la profesora pivotó el proyecto a una **Fase
-3**, **aditiva** a todo lo anterior (nada de lo de arriba se modificó):
-**XG-PON1 (ITU-T G.987)**, **8 ONUs idénticas**, y comparación de **3
-algoritmos DBA** bajo una tabla de **SLA por T-CONT** (T-CONT1/VoIP ≤ 2 ms
-como meta principal).
-
-### Estándar implementado: XG-PON1 ITU-T G.987
-
-| Parámetro | Valor | Fuente |
-|-----------|-------|--------|
-| Upstream | 2.48832 Gbps (2× GPON G.984) | G.987.2 |
-| Downstream | 9.95328 Gbps (4× GPON G.984) | G.987.2 |
-| Trama GTC | 125 μs (igual que G.984.3) | G.987.3 |
-| Bytes/trama upstream | 38,880 bytes (2× Fase 2) | calculado |
-| Split ratio | 1:8 | requerimiento Fase 3 |
-| Alcance / RTT | 20 km / 200 μs (igual Fase 2) | G.987.2 Clase N1 |
-
-### 3 algoritmos DBA comparados
-
-| Algoritmo | Mecanismo | Archivo |
-|---|---|---|
-| **IPACT** | Polling round-robin de ciclo variable (adaptado de EPON, declarado) | `simulator/dba_ipact.py` + `simulator/olt_ipact.py` |
-| **GIANT** | GPA/SPA con contadores SImax/SImin (nativo XG-PON, broadcast BWmap 125μs) | `simulator/dba_giant.py` |
-| **QoSDBA** | Referencia de Fase 2, re-parametrizado a 8 ONUs/XG-PON | `simulator/dba_qos.py` (sin cambios de código) |
-
-### Cómo ejecutar
-
-```bash
-# Una corrida individual
-python3 main_xgpon.py --algorithm ipact --load 400 --verbose
-python3 main_xgpon.py --algorithm giant --load 800 --verbose
-python3 main_xgpon.py --algorithm qos   --load 200 --verbose
-
-# Los 9 escenarios (3 algoritmos x 3 cargas x 10 repeticiones, ~8-15 min)
-python3 run_experiments_xgpon.py
-
-# Generar los 6 gráficos
-python3 analysis/analyze_xgpon.py
-```
-
-Genera `results/xgpon_results.csv`, `results/xgpon_cycle_times.csv` y 6
-PNG en `figures/xgpon/`.
-
-### Resultado clave @ 800 Mbps/ONU (sobrecarga ~257%)
+## Resultado clave @ 800 Mbps/ONU (sobrecarga ~257%)
 
 | Métrica | IPACT | GIANT | QoSDBA |
 |---|---|---|---|
@@ -207,22 +150,50 @@ PNG en `figures/xgpon/`.
 
 **Conclusión:** GIANT y QoSDBA reservan T-CONT1 (VoIP) incondicionalmente
 cada trama → SLA de 2 ms cumplido siempre. IPACT asigna T1 según el último
-reporte (~1 ciclo de antigüedad); bajo saturación el ciclo se satura en
+reporte (~1 ciclo de antigüedad); bajo saturación el ciclo se estanca en
 1008 μs y el delay máximo de T1 supera los 2 ms → 88.4% de cumplimiento —
 exactamente la comparación SR-DBA vs. polling demand-based que pidió la
 profesora.
 
-### Documentación Fase 3
+---
 
-- [`docs/COMO_FUNCIONA_FASE3.md`](docs/COMO_FUNCIONA_FASE3.md) — explicación accesible, paso a paso
-- [`docs/PARA_LA_PROFE_FASE3.md`](docs/PARA_LA_PROFE_FASE3.md) — resumen ejecutivo + resultados
-- [`docs/DOCUMENTACION_TECNICA_FASE3.md`](docs/DOCUMENTACION_TECNICA_FASE3.md) — referencia técnica completa
-- [`docs/PLAN_FASE3.md`](docs/PLAN_FASE3.md) — diseño original y derivaciones
-- [`entregas/Parte_3/`](entregas/Parte_3/) — índice de entrega
+## Documentación
+
+| Si quieres... | Lee... |
+|---|---|
+| Punto de entrada para alguien sin contexto del proyecto | [`docs/GUIA_INICIO.md`](docs/GUIA_INICIO.md) |
+| Diseño completo y derivaciones | [`docs/PLAN_FASE3.md`](docs/PLAN_FASE3.md) |
+| Explicación accesible, sin jerga, paso a paso | [`docs/COMO_FUNCIONA_FASE3.md`](docs/COMO_FUNCIONA_FASE3.md) |
+| Referencia técnica formal (estándares, pseudocódigo, resultados) | [`docs/DOCUMENTACION_TECNICA_FASE3.md`](docs/DOCUMENTACION_TECNICA_FASE3.md) |
+| Resumen ejecutivo + tabla de resultados clave | [`docs/PARA_LA_PROFE_FASE3.md`](docs/PARA_LA_PROFE_FASE3.md) |
+| Checkpoint histórico de implementación | [`docs/ESTADO_FASE3.md`](docs/ESTADO_FASE3.md) |
+| Índice de la entrega académica | [`entregas/Parte_3/`](entregas/Parte_3/) |
+
+---
+
+## Legacy — Fases 1 y 2
+
+El proyecto pasó por dos generaciones anteriores antes de llegar a Fase 3,
+archivadas en `legacy/` para no generar confusión con el código activo:
+
+- **`legacy/fase1/`** — la propuesta original en OMNeT++ (rechazada por la
+  profesora: mezclaba IPACT de EPON y categorías 5G que no son de GPON).
+  Solo quedan el PDF y el PPTX de esa entrega, sin código.
+- **`legacy/fase2/`** — el simulador GPON ITU-T G.984 completo (32 ONUs,
+  BasicDBA vs QoSDBA). **Ya entregado, no se modifica**, pero sigue siendo
+  ejecutable tal cual desde esa carpeta:
+
+  ```bash
+  python3 legacy/fase2/main.py --algorithm qos --load 100 --num-onus 32 --seed 6767 --verbose
+  python3 legacy/fase2/run_experiments.py
+  python3 legacy/fase2/analysis/analyze.py
+  ```
+
+  Documentación de Fase 2 en `legacy/fase2/docs/`.
 
 ---
 
 ## Contacto
 
-Equipo OmneTeam — David Retuerto, José Vega, Matías Perelli  
+Equipo OmneTeam — David Retuerto, José Vega, Matías Perelli
 TEL-341 Simulación de Redes, UTFSM 2026

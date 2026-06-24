@@ -144,8 +144,8 @@ proporcional al sobrante), corriendo sobre los parámetros XG-PON/8 ONUs.
 
 Corrida completa: 9 escenarios (3 algoritmos × 3 cargas T-CONT4) × 10
 repeticiones × 10 s de simulación (1 s de warmup). Resultados completos en
-`results/xgpon_results.csv` y `results/xgpon_cycle_times.csv`, gráficos en
-`figures/xgpon/`.
+`results/results.csv` y `results/cycle_times.csv`, gráficos en
+`figures/`.
 
 | Métrica @ 800 Mbps/ONU (sobrecarga ~257%) | IPACT | GIANT | QoSDBA |
 |---|---|---|---|

@@ -303,7 +303,7 @@ segundo (warmup, para que la simulación llegue a un "régimen estable"):
 
 | Lo que pidió la profesora (reunión 9/6/2026) | ¿Se hizo? | Dónde |
 |---|---|---|
-| Cambiar de GPON (G.984) a **XG-PON (G.987)** | ✅ Sí | `configs/xgpon.json`: 2.48832/9.95328 Gbps, 38,880 bytes/trama |
+| Cambiar de GPON (G.984) a **XG-PON (G.987)** | ✅ Sí | `configs/default.json`: 2.48832/9.95328 Gbps, 38,880 bytes/trama |
 | **8 ONUs idénticas** (antes 32) | ✅ Sí | `num_onus = 8`, mismas tasas/buffers para las 8 |
 | Foco en **subida (upstream) solamente** | ✅ Sí | Igual que en Fase 2, sin cambios |
 | El problema central es **cumplir un SLA**, con **T-CONT1 ≤ 2 ms** como meta principal | ✅ Sí | Tabla de SLA en config + nueva métrica `sla_compliance_pct` |

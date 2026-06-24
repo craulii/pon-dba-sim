@@ -1,30 +1,38 @@
 """
-Generador de 7 gráficos de análisis comparando BasicDBA vs QoS-DBA.
-Lee results/all_results.csv generado por run_experiments.py.
+Generador de gráficos -- XG-PON, IPACT vs GIANT vs QoSDBA, 8 ONUs.
+Lee results/results.csv y results/cycle_times.csv generados por
+run_experiments.py.
 Estilo IEEE paper: fuente serif, colores consistentes, IC 95%, 300 DPI.
+Headline: cumplimiento de SLA (T-CONT1 <= 2 ms).
 """
 import csv
 import os
 import sys
-import statistics
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-RESULTS_PATH = os.path.join(os.path.dirname(__file__), "..", "results", "all_results.csv")
-FIGURES_DIR  = os.path.join(os.path.dirname(__file__), "..", "figures")
+RESULTS_PATH      = os.path.join(os.path.dirname(__file__), "..", "results", "results.csv")
+CYCLE_RESULTS_PATH= os.path.join(os.path.dirname(__file__), "..", "results", "cycle_times.csv")
+FIGURES_DIR       = os.path.join(os.path.dirname(__file__), "..", "figures")
 
 # Colores consistentes
-C_BASIC  = "#1f77b4"   # azul — BasicDBA
-C_QOS    = "#d62728"   # rojo — QosDBA
-C_TC1    = "#2ca02c"   # verde — T-CONT 1
-C_TC2    = "#ff7f0e"   # naranja — T-CONT 2
-C_TC4    = "#9467bd"   # violeta — T-CONT 4
+C_IPACT  = "#1f77b4"   # azul   — IPACT (polling)
+C_GIANT  = "#2ca02c"   # verde  — GIANT (GPA/SPA)
+C_QOS    = "#d62728"   # rojo   — QoSDBA (Fase 2 re-parametrizado)
 
-LOADS    = [10, 25, 50, 75, 100]
-TC_NAMES = {1: "T-CONT 1 (Fixed)", 2: "T-CONT 2 (Assured)", 4: "T-CONT 4 (Best Effort)"}
+ALGOS    = [("ipact", C_IPACT, "IPACT (polling)"),
+            ("giant", C_GIANT, "GIANT (GPA/SPA)"),
+            ("qos",   C_QOS,   "QoSDBA")]
+
+LOADS    = [200, 400, 800]
+TC_NAMES = {1: "T-CONT 1\n(VoIP/control)", 2: "T-CONT 2\n(Video)", 4: "T-CONT 4\n(Best Effort)"}
+
+CAPACITY_MBPS = 2488.32   # XG-PON1 upstream (G.987.2)
+SLA_T1_US     = 2000.0    # 2 ms
+FRAME_US      = 125.0     # trama fija GIANT/QoSDBA
 
 
 def setup_style():
@@ -44,19 +52,39 @@ def load_data(path: str) -> list:
     rows = []
     with open(path, newline="") as f:
         for row in csv.DictReader(f):
+            sla = row["sla_compliance_pct"]
+            sla_ci = row["sla_compliance_ci95"]
             rows.append({
-                "scenario":          row["scenario"],
-                "algorithm":         row["algorithm"],
-                "load_mbps":         int(row["load_mbps"]),
-                "tcont_type":        int(row["tcont_type"]),
-                "latency_mean_us":   float(row["latency_mean_us"]),
-                "latency_mean_ci95": float(row["latency_mean_ci95"]),
-                "latency_p99_us":    float(row["latency_p99_us"]),
-                "latency_p99_ci95":  float(row["latency_p99_ci95"]),
-                "jitter_mean_us":    float(row["jitter_mean_us"]),
-                "throughput_mbps":   float(row["throughput_mbps"]),
-                "loss_rate_mean":    float(row["loss_rate_mean"]),
-                "loss_rate_ci95":    float(row["loss_rate_ci95"]),
+                "scenario":           row["scenario"],
+                "algorithm":          row["algorithm"],
+                "load_mbps":          int(row["load_mbps"]),
+                "tcont_type":         int(row["tcont_type"]),
+                "latency_mean_us":    float(row["latency_mean_us"]),
+                "latency_mean_ci95":  float(row["latency_mean_ci95"]),
+                "latency_p99_us":     float(row["latency_p99_us"]),
+                "latency_p99_ci95":   float(row["latency_p99_ci95"]),
+                "latency_max_us":     float(row["latency_max_us"]),
+                "latency_max_ci95":   float(row["latency_max_ci95"]),
+                "jitter_mean_us":     float(row["jitter_mean_us"]),
+                "throughput_mbps":    float(row["throughput_mbps"]),
+                "loss_rate_mean":     float(row["loss_rate_mean"]),
+                "loss_rate_ci95":     float(row["loss_rate_ci95"]),
+                "sla_compliance_pct": float(sla) if sla not in ("", None) else None,
+                "sla_compliance_ci95":float(sla_ci) if sla_ci not in ("", None) else 0.0,
+            })
+    return rows
+
+
+def load_cycle_data(path: str) -> list:
+    rows = []
+    with open(path, newline="") as f:
+        for row in csv.DictReader(f):
+            rows.append({
+                "scenario":     row["scenario"],
+                "algorithm":    row["algorithm"],
+                "load_mbps":    int(row["load_mbps"]),
+                "seed":         int(row["seed"]),
+                "cycle_time_us":float(row["cycle_time_us"]),
             })
     return rows
 
@@ -78,317 +106,239 @@ def savefig(fig, name: str):
 
 
 # ------------------------------------------------------------------
-# Gráfico 1: Latencia promedio por T-CONT bajo carga alta (100 Mbps)
-# Dos paneles: T-CONT 1&2 (escala pequeña) | T-CONT 4 (escala grande)
+# Gráfico 1 (HEADLINE): Cumplimiento de SLA por T-CONT, carga 800 Mbps/ONU
 # ------------------------------------------------------------------
-def plot_latency_avg_by_tcont(data):
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5),
-                                    gridspec_kw={"width_ratios": [2, 1]})
-    fig.suptitle("Latencia promedio por T-CONT — Carga BE = 100 Mbps/ONU",
-                 fontsize=13)
+def plot_sla_compliance_by_tcont(data, load=800):
+    fig, ax = plt.subplots(figsize=(9, 5))
+    tc_types = [1, 2, 4]
+    x = np.arange(len(tc_types))
+    width = 0.25
 
-    width = 0.35
+    for i, (algo, color, label) in enumerate(ALGOS):
+        vals, errs = [], []
+        for tc in tc_types:
+            rows = filter_data(data, algorithm=algo, load=load, tcont=tc)
+            v = rows[0]["sla_compliance_pct"] if (rows and rows[0]["sla_compliance_pct"] is not None) else 0
+            e = rows[0]["sla_compliance_ci95"] if rows else 0
+            vals.append(v)
+            errs.append(e)
+        bars = ax.bar(x + i*width, vals, width, yerr=errs, label=label,
+                       color=color, alpha=0.85, capsize=4)
+        for bar, v in zip(bars, vals):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1,
+                    f"{v:.1f}%", ha="center", va="bottom", fontsize=8)
 
-    # Panel izquierdo: T-CONT 1 y 2
-    for ax, tc_list, title in [(ax1, [1, 2], "T-CONT 1 (Fixed) y T-CONT 2 (Assured)"),
-                                (ax2, [4],   "T-CONT 4 (Best Effort)")]:
-        x = np.arange(len(tc_list))
-        for i, (algo, color, label) in enumerate([("basic", C_BASIC, "BasicDBA"),
-                                                   ("qos",   C_QOS,   "QoS-DBA")]):
-            vals, errs = [], []
-            for tc in tc_list:
-                rows = filter_data(data, algorithm=algo, load=100, tcont=tc)
-                vals.append(rows[0]["latency_mean_us"] if rows else 0)
-                errs.append(rows[0]["latency_mean_ci95"] if rows else 0)
-            bars = ax.bar(x + i*width, vals, width, yerr=errs, label=label,
-                          color=color, alpha=0.85, capsize=4)
-            # Anotar valores encima de cada barra
-            for bar, v in zip(bars, vals):
-                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() * 1.03,
-                        f"{v/1000:.1f}ms" if v > 1000 else f"{v:.0f}μs",
-                        ha="center", va="bottom", fontsize=8)
-        ax.set_xlabel("Tipo de T-CONT")
-        ax.set_ylabel("Latencia promedio (μs)")
-        ax.set_title(title, fontsize=10)
-        ax.set_xticks(x + width/2)
-        ax.set_xticklabels([TC_NAMES[t] for t in tc_list])
-        ax.legend(fontsize=9)
-
-    fig.tight_layout()
-    savefig(fig, "latency_avg_by_tcont.png")
+    ax.axhline(100, color="gray", linestyle=":", linewidth=1.5)
+    ax.set_ylim(0, 110)
+    ax.set_xlabel("Tipo de T-CONT")
+    ax.set_ylabel("Cumplimiento SLA (%)")
+    ax.set_title(f"Cumplimiento de SLA por T-CONT — Carga BE = {load} Mbps/ONU "
+                  f"(sobrecarga ~{load*8/CAPACITY_MBPS*100:.0f}%)\n"
+                  f"T-CONT1 SLA: delay máximo $\\leq$ 2 ms")
+    ax.set_xticks(x + width)
+    ax.set_xticklabels([TC_NAMES[t] for t in tc_types])
+    ax.legend()
+    savefig(fig, "sla_compliance_by_tcont.png")
 
 
 # ------------------------------------------------------------------
-# Gráfico 2: P99 latencia T-CONT 1 vs carga (gráfico clave)
+# Gráfico 2: Delay máximo de T-CONT1 vs carga, con línea SLA 2ms
 # ------------------------------------------------------------------
-def plot_latency_p99_tcont1_vs_load(data):
+def plot_max_delay_tcont1_vs_load(data):
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    for algo, color, label in [("basic", C_BASIC, "BasicDBA"),
-                                ("qos",   C_QOS,   "QoS-DBA")]:
-        vals = []
-        errs = []
+    for algo, color, label in ALGOS:
+        vals, errs = [], []
         for load in LOADS:
             rows = filter_data(data, algorithm=algo, load=load, tcont=1)
-            vals.append(rows[0]["latency_p99_us"] if rows else 0)
-            errs.append(rows[0]["latency_p99_ci95"] if rows else 0)
-        errs_arr = np.array(errs)
+            vals.append(rows[0]["latency_max_us"] if rows else 0)
+            errs.append(rows[0]["latency_max_ci95"] if rows else 0)
         vals_arr = np.array(vals)
+        errs_arr = np.array(errs)
         ax.plot(LOADS, vals_arr, marker="o", color=color, label=label, linewidth=2)
         ax.fill_between(LOADS, vals_arr - errs_arr, vals_arr + errs_arr,
                         alpha=0.2, color=color)
 
-    # Línea de referencia: budget VoIP 5ms
-    ax.axhline(5000, color="gray", linestyle="--", linewidth=1.5,
-               label="Budget VoIP (5 ms)")
+    ax.axhline(SLA_T1_US, color="black", linestyle="--", linewidth=1.5,
+               label="SLA T-CONT1 (2 ms)")
 
     ax.set_xlabel("Carga T-CONT 4 por ONU (Mbps)")
-    ax.set_ylabel("Latencia P99 T-CONT 1 (μs)")
-    ax.set_title("Latencia P99 de T-CONT 1 (VoIP) vs Carga BE")
+    ax.set_ylabel("Delay máximo T-CONT 1 (μs)")
+    ax.set_title("¿Supera T-CONT1 el SLA de 2 ms? — Delay máximo observado vs carga")
+    ax.set_xticks(LOADS)
     ax.legend()
-    savefig(fig, "latency_p99_tcont1_vs_load.png")
+    savefig(fig, "max_delay_tcont1_vs_load.png")
 
 
 # ------------------------------------------------------------------
-# Gráfico 3: Tasa de pérdida por T-CONT (escala log)
-# ------------------------------------------------------------------
-def plot_loss_rate_by_tcont(data):
-    fig, ax = plt.subplots(figsize=(8, 5))
-    tc_types = [1, 2, 4]
-    x        = np.arange(len(tc_types))
-    width    = 0.35
-    MIN_VAL  = 1e-6
-
-    for i, (algo, color, label) in enumerate([("basic", C_BASIC, "BasicDBA"),
-                                               ("qos",   C_QOS,   "QoS-DBA")]):
-        vals = []
-        errs = []
-        for tc in tc_types:
-            rows = filter_data(data, algorithm=algo, load=100, tcont=tc)
-            v = max(rows[0]["loss_rate_mean"], MIN_VAL) if rows else MIN_VAL
-            e = rows[0]["loss_rate_ci95"] if rows else 0
-            vals.append(v)
-            errs.append(e)
-        ax.bar(x + i*width, vals, width, yerr=errs, label=label,
-               color=color, alpha=0.85, capsize=4)
-
-    ax.set_yscale("log")
-    ax.set_xlabel("Tipo de T-CONT")
-    ax.set_ylabel("Tasa de pérdida (log)")
-    ax.set_title("Tasa de pérdida por T-CONT — Carga BE = 100 Mbps/ONU")
-    ax.set_xticks(x + width/2)
-    ax.set_xticklabels([TC_NAMES[t] for t in tc_types])
-    ax.legend()
-    savefig(fig, "loss_rate_by_tcont.png")
-
-
-# ------------------------------------------------------------------
-# Gráfico 4: Throughput por T-CONT a carga 100 Mbps (barras agrupadas)
-# Muestra cómo QosDBA protege T-CONT 1&2 vs BasicDBA
+# Gráfico 3: Throughput vs carga (agregado), con referencia de capacidad
 # ------------------------------------------------------------------
 def plot_throughput_vs_load(data):
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
-    fig.suptitle("Throughput — Comparación BasicDBA vs QoS-DBA", fontsize=13)
+    fig, ax = plt.subplots(figsize=(8, 5))
 
-    # Panel izq: throughput por T-CONT a carga 100 Mbps
-    tc_types = [1, 2, 4]
-    x = np.arange(len(tc_types))
-    width = 0.35
-    for i, (algo, color, label) in enumerate([("basic", C_BASIC, "BasicDBA"),
-                                               ("qos",   C_QOS,   "QoS-DBA")]):
-        vals = []
-        for tc in tc_types:
-            rows = filter_data(data, algorithm=algo, load=100, tcont=tc)
-            vals.append(rows[0]["throughput_mbps"] if rows else 0)
-        bars = ax1.bar(x + i*width, vals, width, label=label,
-                       color=color, alpha=0.85)
-        for bar, v in zip(bars, vals):
-            ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() * 1.02,
-                     f"{v:.0f}", ha="center", va="bottom", fontsize=7)
-    ax1.set_xlabel("Tipo de T-CONT")
-    ax1.set_ylabel("Throughput (Mbps)")
-    ax1.set_title("Throughput por T-CONT (carga 100 Mbps/ONU)", fontsize=10)
-    ax1.set_xticks(x + width/2)
-    ax1.set_xticklabels([TC_NAMES[t] for t in tc_types])
-    ax1.legend()
-
-    # Panel der: throughput agregado vs carga
-    for algo, color, label, ls in [("basic", C_BASIC, "BasicDBA", "--"),
-                                    ("qos",   C_QOS,   "QoS-DBA",  "-")]:
+    for algo, color, label in ALGOS:
         vals = []
         for load in LOADS:
             total_tp = sum(filter_data(data, algo, load, tc)[0]["throughput_mbps"]
                            if filter_data(data, algo, load, tc) else 0
                            for tc in [1, 2, 4])
             vals.append(total_tp)
-        ax2.plot(LOADS, vals, marker="s", color=color, label=label,
-                 linewidth=2, linestyle=ls)
-    ax2.axhline(1244.16, color="gray", linestyle=":", linewidth=1.5,
-                label="Cap. upstream (1,244 Mbps)")
-    ax2.set_xlabel("Carga T-CONT 4 por ONU (Mbps)")
-    ax2.set_ylabel("Throughput agregado (Mbps)")
-    ax2.set_title("Throughput total vs Carga ofrecida", fontsize=10)
-    ax2.legend()
+        ax.plot(LOADS, vals, marker="s", color=color, label=label, linewidth=2)
 
-    fig.tight_layout()
+    ax.axhline(CAPACITY_MBPS, color="gray", linestyle=":", linewidth=1.5,
+               label=f"Capacidad upstream ({CAPACITY_MBPS:.2f} Mbps)")
+
+    ax.set_xlabel("Carga T-CONT 4 por ONU (Mbps)")
+    ax.set_ylabel("Throughput agregado (Mbps)")
+    ax.set_title("Throughput total vs carga ofrecida — XG-PON1, 8 ONUs")
+    ax.set_xticks(LOADS)
+    ax.legend()
     savefig(fig, "throughput_vs_load.png")
 
 
 # ------------------------------------------------------------------
-# Gráfico 5: CDF de latencia T-CONT 1 (VoIP) — diferencia clave entre algoritmos
+# Gráfico 4 (clave): Distribución del tiempo de ciclo IPACT vs trama fija
 # ------------------------------------------------------------------
-def plot_cdf_latency_tcont4(data):
-    fig, ax = plt.subplots(figsize=(8, 5))
+def plot_cycle_time_distribution(cycle_data):
+    if not cycle_data:
+        print("  (sin datos de cycle time -- omitiendo cycle_time_distribution.png)")
+        return
 
-    # T-CONT 1 muestra la diferencia más dramática entre BasicDBA y QosDBA
-    # BasicDBA: mean ~25,400 μs (VoIP inutilizable)
-    # QosDBA:   mean ~164 μs   (VoIP perfecto)
-    for algo, color, label, ls in [("basic", C_BASIC, "BasicDBA", "--"),
-                                    ("qos",   C_QOS,   "QoS-DBA",  "-")]:
-        rows = filter_data(data, algorithm=algo, load=100, tcont=1)
-        if not rows:
-            continue
-        r    = rows[0]
-        mean = r["latency_mean_us"]
-        p99  = r["latency_p99_us"]
-        # CDF aproximada con puntos estrictamente crecientes en x
-        xs = [0, mean * 0.3, mean * 0.7, mean, p99, p99 * 1.05]
-        ys = [0, 0.10,       0.35,       0.50, 0.99, 1.00]
-        ax.plot(xs, ys, color=color, label=f"{label} (media={mean:.0f} μs)",
-                linewidth=2, linestyle=ls)
+    fig, axes = plt.subplots(1, len(LOADS), figsize=(13, 4.5), sharey=True)
+    fig.suptitle("Polling de ciclo variable (IPACT) vs trama fija 125 μs (GIANT/QoSDBA)",
+                  fontsize=13)
 
-    # Referencia: budget máximo VoIP G.114 = 150 ms de extremo a extremo → upstream ≤ 5 ms
-    ax.axvline(5000, color="gray", linestyle=":", linewidth=1.5, label="Budget VoIP (5 ms)")
-    ax.set_xlabel("Latencia T-CONT 1 — VoIP (μs)")
-    ax.set_ylabel("Probabilidad acumulada")
-    ax.set_title("CDF de Latencia T-CONT 1 (VoIP) — Carga 100 Mbps/ONU\n"
-                 "QoS-DBA protege VoIP; BasicDBA lo degrada 155×")
-    ax.legend()
-    savefig(fig, "cdf_latency_tcont4.png")
-
-
-# ------------------------------------------------------------------
-# Gráfico 6: Utilización del canal vs carga
-# ------------------------------------------------------------------
-def plot_channel_utilization(data):
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    # Proxy: throughput / capacidad máxima
-    cap_mbps = 1244.16
-
-    for algo, color, label, ls in [("basic", C_BASIC, "BasicDBA", "--"),
-                                    ("qos",   C_QOS,   "QoS-DBA",  "-")]:
-        utils = []
-        for load in LOADS:
-            total_tp = 0.0
-            for tc in [1, 2, 4]:
-                rows = filter_data(data, algorithm=algo, load=load, tcont=tc)
-                if rows:
-                    total_tp += rows[0]["throughput_mbps"]
-            utils.append(min(total_tp / cap_mbps * 100, 100.0))
-        ax.plot(LOADS, utils, marker="^", color=color, label=label,
-                linewidth=2, linestyle=ls)
-
-    ax.axhline(100, color="gray", linestyle="--", linewidth=1, label="100% utilización")
-    ax.set_ylim(0, 115)
-    ax.set_xlabel("Carga T-CONT 4 por ONU (Mbps)")
-    ax.set_ylabel("Utilización canal upstream (%)")
-    ax.set_title("Utilización del canal upstream vs Carga ofrecida\n"
-                 "(ambos algoritmos logran misma eficiencia — diferencia es en latencia QoS)")
-    ax.legend()
-    ax.text(0.02, 0.15,
-            "Nota: BasicDBA y QoS-DBA logran igual utilización.\nLa diferencia está en la latencia por T-CONT (ver gráfico 1).",
-            transform=ax.transAxes, fontsize=8, color="gray",
-            verticalalignment="bottom",
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="lightyellow", alpha=0.7))
-    savefig(fig, "channel_utilization.png")
-
-
-# ------------------------------------------------------------------
-# Gráfico 7: Dashboard resumen 2×2
-# ------------------------------------------------------------------
-def plot_summary_dashboard(data):
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    fig.suptitle("Comparación BasicDBA vs QoS-DBA — Red GPON ITU-T G.984",
-                 fontsize=14, fontweight="bold")
-
-    # Subplot 1: Latencia promedio por T-CONT (barras)
-    ax = axes[0, 0]
-    tc_types = [1, 2, 4]
-    x = np.arange(len(tc_types))
-    width = 0.35
-    for i, (algo, color, label) in enumerate([("basic", C_BASIC, "BasicDBA"),
-                                               ("qos",   C_QOS,   "QoS-DBA")]):
-        vals = []
-        errs = []
-        for tc in tc_types:
-            rows = filter_data(data, algorithm=algo, load=100, tcont=tc)
-            vals.append(rows[0]["latency_mean_us"] if rows else 0)
-            errs.append(rows[0]["latency_mean_ci95"] if rows else 0)
-        ax.bar(x + i*width, vals, width, yerr=errs, label=label,
-               color=color, alpha=0.85, capsize=3)
-    ax.set_title("Latencia por T-CONT (carga 100 Mbps)")
-    ax.set_ylabel("Latencia media (μs)")
-    ax.set_xticks(x + width/2)
-    ax.set_xticklabels(["T-CONT 1", "T-CONT 2", "T-CONT 4"])
-    ax.legend(fontsize=9)
-
-    # Subplot 2: P99 T-CONT 1 vs carga
-    ax = axes[0, 1]
-    for algo, color, label in [("basic", C_BASIC, "BasicDBA"),
-                                ("qos",   C_QOS,   "QoS-DBA")]:
-        vals = [filter_data(data, algo, l, 1)[0]["latency_p99_us"]
-                if filter_data(data, algo, l, 1) else 0 for l in LOADS]
-        ax.plot(LOADS, vals, marker="o", color=color, label=label, linewidth=2)
-    ax.axhline(5000, color="gray", linestyle="--", linewidth=1, label="5 ms budget")
-    ax.set_title("P99 Latencia T-CONT 1 vs Carga")
-    ax.set_xlabel("Carga BE (Mbps/ONU)")
-    ax.set_ylabel("P99 (μs)")
-    ax.legend(fontsize=9)
-
-    # Subplot 3: Throughput vs carga
-    ax = axes[1, 0]
-    cap_mbps = 1244.16
-    for algo, color, label in [("basic", C_BASIC, "BasicDBA"),
-                                ("qos",   C_QOS,   "QoS-DBA")]:
-        vals = []
-        for load in LOADS:
-            tp = sum(filter_data(data, algo, load, tc)[0]["throughput_mbps"]
-                     if filter_data(data, algo, load, tc) else 0
-                     for tc in [1, 2, 4])
-            vals.append(tp)
-        ax.plot(LOADS, vals, marker="s", color=color, label=label, linewidth=2)
-    ax.axhline(cap_mbps, color="gray", linestyle=":", linewidth=1)
-    ax.set_title("Throughput vs Carga")
-    ax.set_xlabel("Carga BE (Mbps/ONU)")
-    ax.set_ylabel("Throughput (Mbps)")
-    ax.legend(fontsize=9)
-
-    # Subplot 4: Tasa de pérdida por T-CONT
-    ax = axes[1, 1]
-    tc_types = [1, 2, 4]
-    x = np.arange(len(tc_types))
-    MIN_VAL = 1e-6
-    for i, (algo, color, label) in enumerate([("basic", C_BASIC, "BasicDBA"),
-                                               ("qos",   C_QOS,   "QoS-DBA")]):
-        vals = []
-        for tc in tc_types:
-            rows = filter_data(data, algorithm=algo, load=100, tcont=tc)
-            vals.append(max(rows[0]["loss_rate_mean"], MIN_VAL) if rows else MIN_VAL)
-        ax.bar(x + i*width, vals, width, label=label, color=color, alpha=0.85)
-    ax.set_yscale("log")
-    ax.set_title("Pérdida por T-CONT (carga 100 Mbps)")
-    ax.set_ylabel("Tasa de pérdida")
-    ax.set_xticks(x + width/2)
-    ax.set_xticklabels(["T-CONT 1", "T-CONT 2", "T-CONT 4"])
-    ax.legend(fontsize=9)
+    for ax, load in zip(axes, LOADS):
+        samples = [r["cycle_time_us"] for r in cycle_data
+                   if r["load_mbps"] == load and r["algorithm"] == "ipact"]
+        if samples:
+            ax.hist(samples, bins=40, color=C_IPACT, alpha=0.75, label="IPACT (ciclo variable)")
+        ax.axvline(FRAME_US, color="black", linestyle="--", linewidth=1.5,
+                   label="Trama fija (125 μs)")
+        ax.set_title(f"Carga = {load} Mbps/ONU")
+        ax.set_xlabel("Duración de ciclo (μs)")
+        if ax is axes[0]:
+            ax.set_ylabel("Frecuencia")
+        ax.legend(fontsize=8)
 
     fig.tight_layout()
+    savefig(fig, "cycle_time_distribution.png")
+
+
+# ------------------------------------------------------------------
+# Gráfico 5: Cumplimiento de SLA de T-CONT1 vs carga
+# ------------------------------------------------------------------
+def plot_sla_compliance_vs_load(data):
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    for algo, color, label in ALGOS:
+        vals, errs = [], []
+        for load in LOADS:
+            rows = filter_data(data, algorithm=algo, load=load, tcont=1)
+            v = rows[0]["sla_compliance_pct"] if (rows and rows[0]["sla_compliance_pct"] is not None) else 0
+            e = rows[0]["sla_compliance_ci95"] if rows else 0
+            vals.append(v)
+            errs.append(e)
+        vals_arr = np.array(vals)
+        errs_arr = np.array(errs)
+        ax.plot(LOADS, vals_arr, marker="o", color=color, label=label, linewidth=2)
+        ax.fill_between(LOADS, vals_arr - errs_arr, vals_arr + errs_arr,
+                        alpha=0.2, color=color)
+
+    ax.axhline(100, color="gray", linestyle=":", linewidth=1.5, label="100%")
+    ax.set_ylim(0, 110)
+    ax.set_xlabel("Carga T-CONT 4 por ONU (Mbps)")
+    ax.set_ylabel("Cumplimiento SLA T-CONT 1 (%)")
+    ax.set_title("Cumplimiento del SLA de T-CONT1 (delay $\\leq$ 2 ms) vs carga")
+    ax.set_xticks(LOADS)
+    ax.legend()
+    savefig(fig, "sla_compliance_vs_load.png")
+
+
+# ------------------------------------------------------------------
+# Gráfico 6: Dashboard resumen 2x2
+# ------------------------------------------------------------------
+def plot_summary_dashboard(data, cycle_data, load=800):
+    fig, axs = plt.subplots(2, 2, figsize=(13, 10))
+    fig.suptitle("Fase 3 — XG-PON1, IPACT vs GIANT vs QoSDBA (8 ONUs)", fontsize=15)
+
+    # (a) SLA compliance por T-CONT @ load
+    ax = axs[0, 0]
+    tc_types = [1, 2, 4]
+    x = np.arange(len(tc_types))
+    width = 0.25
+    for i, (algo, color, label) in enumerate(ALGOS):
+        vals = []
+        for tc in tc_types:
+            rows = filter_data(data, algorithm=algo, load=load, tcont=tc)
+            vals.append(rows[0]["sla_compliance_pct"] if (rows and rows[0]["sla_compliance_pct"] is not None) else 0)
+        ax.bar(x + i*width, vals, width, label=label, color=color, alpha=0.85)
+    ax.axhline(100, color="gray", linestyle=":", linewidth=1)
+    ax.set_ylim(0, 110)
+    ax.set_xticks(x + width)
+    ax.set_xticklabels([TC_NAMES[t] for t in tc_types], fontsize=9)
+    ax.set_ylabel("SLA compliance (%)")
+    ax.set_title(f"(a) Cumplimiento SLA @ {load} Mbps/ONU")
+    ax.legend(fontsize=8)
+
+    # (b) Max delay T1 vs carga
+    ax = axs[0, 1]
+    for algo, color, label in ALGOS:
+        vals = [filter_data(data, algo, l, 1)[0]["latency_max_us"]
+                if filter_data(data, algo, l, 1) else 0 for l in LOADS]
+        ax.plot(LOADS, vals, marker="o", color=color, label=label, linewidth=2)
+    ax.axhline(SLA_T1_US, color="black", linestyle="--", linewidth=1.5, label="SLA (2 ms)")
+    ax.set_xlabel("Carga T-CONT4 (Mbps/ONU)")
+    ax.set_ylabel("Delay máximo T-CONT1 (μs)")
+    ax.set_title("(b) Delay máximo T-CONT1 vs carga")
+    ax.set_xticks(LOADS)
+    ax.legend(fontsize=8)
+
+    # (c) Throughput vs carga
+    ax = axs[1, 0]
+    for algo, color, label in ALGOS:
+        vals = []
+        for l in LOADS:
+            total_tp = sum(filter_data(data, algo, l, tc)[0]["throughput_mbps"]
+                           if filter_data(data, algo, l, tc) else 0
+                           for tc in [1, 2, 4])
+            vals.append(total_tp)
+        ax.plot(LOADS, vals, marker="s", color=color, label=label, linewidth=2)
+    ax.axhline(CAPACITY_MBPS, color="gray", linestyle=":", linewidth=1.5, label="Capacidad")
+    ax.set_xlabel("Carga T-CONT4 (Mbps/ONU)")
+    ax.set_ylabel("Throughput agregado (Mbps)")
+    ax.set_title("(c) Throughput vs carga")
+    ax.set_xticks(LOADS)
+    ax.legend(fontsize=8)
+
+    # (d) Distribución de cycle time (boxplot por algoritmo, carga=load)
+    ax = axs[1, 1]
+    box_data, box_labels, box_colors = [], [], []
+    for algo, color, label in ALGOS:
+        if algo == "ipact":
+            samples = [r["cycle_time_us"] for r in cycle_data
+                       if r["load_mbps"] == load and r["algorithm"] == "ipact"]
+            if samples:
+                box_data.append(samples)
+                box_labels.append(label)
+                box_colors.append(color)
+        else:
+            # GIANT/QoSDBA: trama fija de 125us (sin variabilidad)
+            box_data.append([FRAME_US])
+            box_labels.append(label)
+            box_colors.append(color)
+    bp = ax.boxplot(box_data, tick_labels=box_labels, patch_artist=True)
+    for patch, color in zip(bp["boxes"], box_colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.6)
+    ax.set_ylabel("Duración de ciclo / trama (μs)")
+    ax.set_title(f"(d) Ciclo de polling vs trama fija @ {load} Mbps/ONU")
+    ax.tick_params(axis="x", labelsize=8)
+
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
     savefig(fig, "summary_dashboard.png")
 
 
-# ------------------------------------------------------------------
-# Main
 # ------------------------------------------------------------------
 def main():
     if not os.path.exists(RESULTS_PATH):
@@ -400,19 +350,23 @@ def main():
     data = load_data(RESULTS_PATH)
     print(f"  {len(data)} filas de resultados cargadas")
 
+    cycle_data = []
+    if os.path.exists(CYCLE_RESULTS_PATH):
+        cycle_data = load_cycle_data(CYCLE_RESULTS_PATH)
+        print(f"  {len(cycle_data)} muestras de cycle time cargadas")
+
     setup_style()
     os.makedirs(FIGURES_DIR, exist_ok=True)
 
     print("Generando gráficos...")
-    plot_latency_avg_by_tcont(data)
-    plot_latency_p99_tcont1_vs_load(data)
-    plot_loss_rate_by_tcont(data)
+    plot_sla_compliance_by_tcont(data)
+    plot_max_delay_tcont1_vs_load(data)
     plot_throughput_vs_load(data)
-    plot_cdf_latency_tcont4(data)
-    plot_channel_utilization(data)
-    plot_summary_dashboard(data)
+    plot_cycle_time_distribution(cycle_data)
+    plot_sla_compliance_vs_load(data)
+    plot_summary_dashboard(data, cycle_data)
 
-    print(f"\n7 gráficos guardados en: {FIGURES_DIR}/")
+    print(f"\n6 gráficos guardados en: {FIGURES_DIR}/")
 
 
 if __name__ == "__main__":

@@ -6,7 +6,8 @@ Ejecutar: python3 run.py
 import os, sys, time, json, csv, statistics, random
 from datetime import datetime
 
-sys.path.insert(0, os.path.dirname(__file__))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, BASE_DIR)
 from main import load_config, build_config, run_simulation
 
 # ─────────────────────────────────────────────
@@ -145,7 +146,7 @@ def run_quick_test():
     header()
     section("Prueba rápida")
     print(f"\n  {c(C.GRAY, 'Parámetros:')} QosDBA · 100 Mbps · 8 ONUs · 2s sim · seed 6767\n")
-    base    = load_config("configs/default.json")
+    base    = load_config(os.path.join(BASE_DIR, "configs/default.json"))
     config  = build_config(base, num_onus=8, tcont4_rate_bps=100_000_000,
                            duration=2.0, warmup=0.2)
     t0 = time.time()
@@ -213,7 +214,7 @@ def run_custom():
     warmup  = min(1.0, dur * 0.1)
     seed    = 6767
 
-    base   = load_config("configs/default.json")
+    base   = load_config(os.path.join(BASE_DIR, "configs/default.json"))
     config = build_config(base, num_onus=num_onus, tcont4_rate_bps=load,
                           duration=dur, warmup=warmup)
 
@@ -257,9 +258,9 @@ def run_full_experiments():
     header()
     section("Experimentos completos")
 
-    with open("configs/scenarios.json") as f:
+    with open(os.path.join(BASE_DIR, "configs/scenarios.json")) as f:
         scenarios = json.load(f)["scenarios"]
-    base_cfg    = load_config("configs/default.json")
+    base_cfg    = load_config(os.path.join(BASE_DIR, "configs/default.json"))
     sim_cfg     = base_cfg["simulation"]
     REPS        = sim_cfg.get("repetitions", 10)
     SEED_BASE   = sim_cfg.get("seed_base", 6767)
@@ -375,8 +376,8 @@ def run_full_experiments():
             })
 
     # Guardar CSV
-    os.makedirs("results", exist_ok=True)
-    out_path = "results/all_results.csv"
+    os.makedirs(os.path.join(BASE_DIR, "results"), exist_ok=True)
+    out_path = os.path.join(BASE_DIR, "results/all_results.csv")
     with open(out_path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(all_rows[0].keys()))
         w.writeheader()
@@ -423,7 +424,7 @@ def do_generate_graphs(quiet=False):
         section("Generar gráficos")
         print()
 
-    if not os.path.exists("results/all_results.csv"):
+    if not os.path.exists(os.path.join(BASE_DIR, "results/all_results.csv")):
         print(f"  {c(C.RED,'✗')}  No se encontró results/all_results.csv")
         print(f"  {c(C.GRAY,'→ Ejecuta primero los experimentos completos (opción 3)')}")
         press_enter()
@@ -437,7 +438,7 @@ def do_generate_graphs(quiet=False):
     def worker():
         try:
             import subprocess
-            subprocess.run([sys.executable, "analysis/analyze.py"],
+            subprocess.run([sys.executable, os.path.join(BASE_DIR, "analysis/analyze.py")],
                            check=True, capture_output=True)
         except Exception as e:
             error[0] = str(e)
@@ -459,7 +460,7 @@ def do_generate_graphs(quiet=False):
         elapsed = time.time() - t0
         print(f"\r  {c(C.GREEN,'✓')}  7 gráficos generados en "
               f"{c(C.WHITE+C.BOLD, f'{elapsed:.1f}s')}      ")
-        figs = [f for f in os.listdir("figures") if f.endswith(".png")]
+        figs = [f for f in os.listdir(os.path.join(BASE_DIR, "figures")) if f.endswith(".png")]
         for fig in sorted(figs):
             print(f"     {c(C.GRAY,'→')} figures/{c(C.CYAN, fig)}")
 
@@ -476,13 +477,13 @@ def view_results():
     header()
     section("Resultados guardados")
 
-    if not os.path.exists("results/all_results.csv"):
+    if not os.path.exists(os.path.join(BASE_DIR, "results/all_results.csv")):
         print(f"\n  {c(C.RED,'✗')}  No hay resultados. Ejecuta los experimentos primero.")
         press_enter()
         return
 
     rows = []
-    with open("results/all_results.csv", newline="") as f:
+    with open(os.path.join(BASE_DIR, "results/all_results.csv"), newline="") as f:
         for r in csv.DictReader(f):
             rows.append({k: (float(v) if k not in ("scenario","algorithm")
                              else v) for k, v in r.items()})
@@ -540,7 +541,7 @@ def view_results():
               f"{c(C.RED+C.BOLD if ratio > 10 else C.GRAY, f'{ratio:.0f}×'):>16}")
 
     print()
-    mtime = os.path.getmtime("results/all_results.csv")
+    mtime = os.path.getmtime(os.path.join(BASE_DIR, "results/all_results.csv"))
     dt    = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
     print(f"  {dim(f'Última actualización: {dt}  ·  {len(rows)} filas')}")
     press_enter()
@@ -561,9 +562,9 @@ def main_menu():
         header()
 
         # Estado del proyecto
-        has_results = os.path.exists("results/all_results.csv")
-        has_figures = any(f.endswith(".png") for f in os.listdir("figures")) \
-                      if os.path.isdir("figures") else False
+        has_results = os.path.exists(os.path.join(BASE_DIR, "results/all_results.csv"))
+        has_figures = any(f.endswith(".png") for f in os.listdir(os.path.join(BASE_DIR, "figures"))) \
+                      if os.path.isdir(os.path.join(BASE_DIR, "figures")) else False
         status = []
         status.append(c(C.GREEN,"✓ results/all_results.csv") if has_results
                       else c(C.GRAY,"○ sin resultados"))

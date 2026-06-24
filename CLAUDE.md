@@ -1,14 +1,28 @@
-# CLAUDE.md — Simulador GPON DBA desde cero (SIN OMNeT++)
+# CLAUDE.md — Simulador GPON/XG-PON DBA desde cero (SIN OMNeT++)
 
-## ESTADO ACTUAL DEL PROYECTO — FASE 3 (XG-PON)
+## ESTADO ACTUAL DEL PROYECTO — FASE 3 (XG-PON) ES LA ÚNICA ACTIVA
 
-**Este documento describe el diseño original de Fase 2 (GPON G.984, 32
-ONUs, BasicDBA/QoSDBA) — ya implementado, entregado y NO se modifica**
-(`configs/default.json`, `dba_basic.py`, `dba_qos.py`, `scenarios.json`,
-`results/all_results.csv`, `figures/*.png` de Fase 2, `docs/PARA_LA_PROFE.md`,
-`docs/DOCUMENTACION_TECNICA.md`, `entregas/Parte_2/`).
+**El repo fue reorganizado: Fase 1 y Fase 2 se archivaron en `legacy/` y
+la raíz del proyecto quedó dedicada exclusivamente a Fase 3**, para evitar
+confundir ambas generaciones del simulador.
 
-Tras la reunión del 9/6/2026, la profesora pivotó el proyecto a una **Fase
+- `legacy/fase1/` — la propuesta original en OMNeT++ (rechazada por la
+  profesora), solo quedan el PDF/PPTX de la entrega.
+- `legacy/fase2/` — el simulador GPON G.984 completo (32 ONUs,
+  BasicDBA/QoSDBA): código, configs, resultados, figuras y docs. **Ya
+  entregado, NO se modifica** — pero sigue siendo ejecutable tal cual desde
+  esa carpeta (`python3 legacy/fase2/main.py ...`, ver
+  `legacy/fase2/docs/`). Los módulos compartidos con Fase 3
+  (`simulator/engine.py`, `simulator/onu.py`, `simulator/tcont.py`,
+  `simulator/traffic.py`, `simulator/olt.py`, `simulator/dba_qos.py`,
+  `metrics/collector.py`) **se quedaron en la raíz** porque Fase 3 los
+  reutiliza sin cambios — no están duplicados en `legacy/`.
+- **Raíz del repo** — Fase 3, ahora sin sufijo `_xgpon` en los nombres
+  (antes `main_xgpon.py`, `configs/xgpon.json`, etc.; ahora `main.py`,
+  `configs/default.json`, etc., ya que Fase 2 ya no ocupa esos nombres en
+  la raíz).
+
+Tras la reunión del 9/6/2026, la profesora pivotó el proyecto a esta **Fase
 3** (código + experimentos + documentación, ya completa):
 
 - **XG-PON1 (ITU-T G.987)** en vez de GPON G.984 — upstream 2.48832 Gbps,
@@ -22,24 +36,31 @@ Tras la reunión del 9/6/2026, la profesora pivotó el proyecto a una **Fase
   "NO IPACT" de Fase 2 (ver más abajo): ahora es una comparación explícita
   de benchmarking, no "modelar GPON con IPACT".
 
-Todo lo de Fase 3 es **aditivo**: archivos nuevos
-(`configs/xgpon.json`, `configs/scenarios_xgpon.json`,
+Archivos activos en la raíz: `configs/default.json`, `configs/scenarios.json`,
 `simulator/dba_giant.py`, `simulator/dba_ipact.py`, `simulator/olt_ipact.py`,
-`main_xgpon.py`, `run_experiments_xgpon.py`, `analysis/analyze_xgpon.py`) +
-cambios aditivos en `simulator/engine.py` (+3 eventos), `simulator/onu.py`
-(+`on_receive_gate`), `metrics/collector.py` (+SLA/cycle_time).
+`main.py`, `run_experiments.py`, `analysis/analyze.py`, más los módulos
+compartidos listados arriba (`simulator/engine.py`, `simulator/onu.py`,
+`simulator/tcont.py`, `simulator/traffic.py`, `simulator/olt.py`,
+`simulator/dba_qos.py`, `metrics/collector.py`).
 
 **Documentación de Fase 3** (leer en este orden):
+0. [`docs/GUIA_INICIO.md`](docs/GUIA_INICIO.md) — punto de entrada para alguien sin contexto del proyecto
 1. [`docs/PLAN_FASE3.md`](docs/PLAN_FASE3.md) — diseño completo y derivaciones
 2. [`docs/COMO_FUNCIONA_FASE3.md`](docs/COMO_FUNCIONA_FASE3.md) — explicación accesible/sin jerga, paso a paso
 3. [`docs/DOCUMENTACION_TECNICA_FASE3.md`](docs/DOCUMENTACION_TECNICA_FASE3.md) — referencia técnica formal (estándares, pseudocódigo, resultados)
 4. [`docs/PARA_LA_PROFE_FASE3.md`](docs/PARA_LA_PROFE_FASE3.md) — resumen ejecutivo + tabla de resultados clave
 5. [`docs/ESTADO_FASE3.md`](docs/ESTADO_FASE3.md) — checkpoint histórico de implementación
 
+(Los nombres de estos docs conservan el sufijo `_FASE3`: no se renombraron
+al reorganizar, solo se archivó Fase 1/2 y se le quitó el sufijo `_xgpon`
+al código de Fase 3.)
+
 Las secciones de abajo (CONTEXTO CRÍTICO en adelante) describen el diseño
 **original de Fase 2** y se mantienen como referencia histórica — varias de
 sus reglas (p.ej. "NO usar IPACT") fueron explícitamente revertidas en Fase
-3, según se documenta arriba y en `docs/PLAN_FASE3.md`.
+3, según se documenta arriba y en `docs/PLAN_FASE3.md`. Las rutas de
+archivo que mencionan (`main.py`, `configs/default.json`, etc.) se refieren
+a las ubicaciones **dentro de `legacy/fase2/`**, no a la raíz actual.
 
 ---
 

@@ -77,7 +77,7 @@ existentes): `EVT_OLT_SEND_GATE`, `EVT_ONU_RECV_GATE`, `EVT_OLT_POLL_NEXT`.
 
 ---
 
-## 1. `configs/xgpon.json` (NUEVO)
+## 1. `configs/default.json` (NUEVO)
 
 ```json
 {
@@ -540,7 +540,7 @@ Verificar que `MetricsCollector(warmup_s=0.0)` (llamada estilo Fase 2, sin
 
 ---
 
-## 5. `configs/scenarios_xgpon.json` (NUEVO)
+## 5. `configs/scenarios.json` (NUEVO)
 
 9 escenarios = 3 algoritmos × 3 niveles de carga T-CONT4 (subconjunto
 representativo de los 5 reescalados, para mantener el tiempo total
@@ -574,9 +574,9 @@ niveles de Fase 2 — no crítico.)
 
 ## 6. Puntos de entrada
 
-### 6.1 `main_xgpon.py` (NUEVO, espejo de `main.py`)
+### 6.1 `main.py` (NUEVO, espejo de `main.py`)
 
-- `CONFIG_PATH = configs/xgpon.json`.
+- `CONFIG_PATH = configs/default.json`.
 - `--algorithm {ipact,giant,qos}`, `--load` (Mbps/ONU para T-CONT4),
   `--num-onus` default 8.
 - `run_simulation()`: construye `sla_bounds = {int(k): v["max_delay_s"] for
@@ -594,15 +594,15 @@ niveles de Fase 2 — no crítico.)
   y `SLA%` (`sla_compliance_pct`); si `summary` trae `cycle_time_*`, imprimir
   línea extra con mean/min/max del ciclo (solo aplica a IPACT).
 
-### 6.2 `run_experiments_xgpon.py` (NUEVO, espejo de `run_experiments.py`)
+### 6.2 `run_experiments.py` (NUEVO, espejo de `run_experiments.py`)
 
-- Lee `configs/xgpon.json` + `configs/scenarios_xgpon.json`, importa de
+- Lee `configs/default.json` + `configs/scenarios.json`, importa de
   `main_xgpon`.
 - Por cada escenario/repetición agrega también `latency_max_us` y
   `sla_compliance_pct` (con CI95 igual que las métricas existentes).
-- Escribe `results/xgpon_results.csv` (NO sobrescribe `all_results.csv`).
+- Escribe `results/results.csv` (NO sobrescribe `all_results.csv`).
 - Para escenarios `ipact`, recolecta `summary["cycle_time_samples"]` de cada
-  repetición y escribe `results/xgpon_cycle_times.csv` (filas:
+  repetición y escribe `results/cycle_times.csv` (filas:
   `scenario, algorithm, load_mbps, seed, cycle_time_us`); para
   `giant`/`qos` esta lista queda vacía (no se llama `record_cycle_time`).
 
@@ -612,12 +612,12 @@ prioritario.
 
 ---
 
-## 7. `analysis/analyze_xgpon.py` (NUEVO)
+## 7. `analysis/analyze.py` (NUEVO)
 
 Mismo estilo/helpers que `analysis/analyze.py` (serif, IC95%, 300 DPI) —
 duplicar los helpers `setup_style()`/`savefig()` (más simple que acoplar a
-Fase 2). Lee `results/xgpon_results.csv` y `results/xgpon_cycle_times.csv`.
-Salida en `figures/xgpon/` (subcarpeta nueva, no colisiona con Fase 2).
+Fase 2). Lee `results/results.csv` y `results/cycle_times.csv`.
+Salida en `figures/` (subcarpeta nueva, no colisiona con Fase 2).
 
 Gráficos:
 1. **`sla_compliance_by_tcont.png`** (HEADLINE) — barras agrupadas, x=T-CONT
@@ -666,7 +666,7 @@ Gráficos:
   en ITU-T G.984.3/G.987.3 T-CONT semantics y citar como "GIANT (Guaranteed +
   Surplus, alineado a ITU-T) según material de cátedra").
 - `entregas/Parte_3/README.md` (NUEVO) — índice corto apuntando a los dos
-  docs anteriores y a `figures/xgpon/`.
+  docs anteriores y a `figures/`.
 
 ---
 
@@ -676,9 +676,9 @@ Ejecutar desde `/home/crauli/USM/Simula/pon-dba-sim`:
 
 1. **Smoke tests** (uno por algoritmo, corrida corta):
    ```bash
-   python3 main_xgpon.py --algorithm qos   --load 400 --duration 2 --warmup 0.2 --verbose
-   python3 main_xgpon.py --algorithm giant --load 400 --duration 2 --warmup 0.2 --verbose
-   python3 main_xgpon.py --algorithm ipact --load 400 --duration 2 --warmup 0.2 --verbose
+   python3 main.py --algorithm qos   --load 400 --duration 2 --warmup 0.2 --verbose
+   python3 main.py --algorithm giant --load 400 --duration 2 --warmup 0.2 --verbose
+   python3 main.py --algorithm ipact --load 400 --duration 2 --warmup 0.2 --verbose
    ```
    Verificar: sin excepciones, tabla imprime, utilización del canal entre 0%
    y 100% (nunca >100%).
@@ -706,13 +706,13 @@ Ejecutar desde `/home/crauli/USM/Simula/pon-dba-sim`:
 
 6. **Corrida completa + análisis** (al final):
    ```bash
-   python3 run_experiments_xgpon.py
-   python3 analysis/analyze_xgpon.py
-   ls figures/xgpon/
+   python3 run_experiments.py
+   python3 analysis/analyze.py
+   ls figures/
    ```
-   Verificar: `results/xgpon_results.csv` con 9 escenarios × 3 T-CONT (27
-   filas + header), `results/xgpon_cycle_times.csv` con filas solo para los
-   3 escenarios IPACT, `figures/xgpon/*.png` con 6 archivos, todos abren sin
+   Verificar: `results/results.csv` con 9 escenarios × 3 T-CONT (27
+   filas + header), `results/cycle_times.csv` con filas solo para los
+   3 escenarios IPACT, `figures/*.png` con 6 archivos, todos abren sin
    error.
 
 7. **Compatibilidad de `MetricsCollector`**: `MetricsCollector(warmup_s=0.0)`
@@ -726,16 +726,16 @@ Ejecutar desde `/home/crauli/USM/Simula/pon-dba-sim`:
 1. `simulator/engine.py` — 3 nuevas constantes EVT_* (sin cambio de
    comportamiento).
 2. `metrics/collector.py` — campos/métodos aditivos. Verificar punto 9.7.
-3. `configs/xgpon.json`.
-4. `simulator/dba_giant.py` — probar primero con `main_xgpon.py` solo para
+3. `configs/default.json`.
+4. `simulator/dba_giant.py` — probar primero con `main.py` solo para
    `qos`/`giant` (reusa `OLT`, sin wiring nuevo) → camino más rápido a un
    baseline XG-PON funcionando.
 5. `simulator/onu.py` — agregar `on_receive_gate` (método aditivo).
 6. `simulator/dba_ipact.py`, `simulator/olt_ipact.py`.
-7. `main_xgpon.py` completo (3 algoritmos).
+7. `main.py` completo (3 algoritmos).
 8. Verificación 1–5.
-9. `configs/scenarios_xgpon.json`, `run_experiments_xgpon.py`. Verificación 6.
-10. `analysis/analyze_xgpon.py`.
+9. `configs/scenarios.json`, `run_experiments.py`. Verificación 6.
+10. `analysis/analyze.py`.
 11. `entregas/Parte_3/`, `docs/PARA_LA_PROFE_FASE3.md`,
     `docs/DOCUMENTACION_TECNICA_FASE3.md`.
 
@@ -743,16 +743,16 @@ Ejecutar desde `/home/crauli/USM/Simula/pon-dba-sim`:
 
 ## Archivos críticos
 
-- `configs/xgpon.json` (NUEVO)
-- `configs/scenarios_xgpon.json` (NUEVO)
+- `configs/default.json` (NUEVO)
+- `configs/scenarios.json` (NUEVO)
 - `simulator/engine.py` (aditivo: 3 constantes)
 - `simulator/dba_giant.py` (NUEVO)
 - `simulator/dba_ipact.py` (NUEVO)
 - `simulator/olt_ipact.py` (NUEVO)
 - `simulator/onu.py` (aditivo: método `on_receive_gate`)
 - `metrics/collector.py` (aditivo)
-- `main_xgpon.py` (NUEVO)
-- `run_experiments_xgpon.py` (NUEVO)
-- `analysis/analyze_xgpon.py` (NUEVO)
+- `main.py` (NUEVO)
+- `run_experiments.py` (NUEVO)
+- `analysis/analyze.py` (NUEVO)
 - `docs/PARA_LA_PROFE_FASE3.md`, `docs/DOCUMENTACION_TECNICA_FASE3.md`,
   `entregas/Parte_3/README.md` (NUEVOS)

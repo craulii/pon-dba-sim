@@ -142,13 +142,13 @@ ese acceso — broadcast de BWmap (GIANT/QoSDBA) vs. polling secuencial
 | `simulator/dba_giant.py` | **Nuevo** | GIANT: GPA (T1 fijo + T2 vía SImax) + SPA (T4 vía SImin + round-robin) |
 | `simulator/dba_ipact.py` | **Nuevo** | `IpactDBA.allocate_onu()`: grant "limited service" por ONU |
 | `simulator/olt_ipact.py` | **Nuevo** | `OLTPolling`: polling round-robin de ciclo variable |
-| `simulator/dba_qos.py` | Sin cambios de código | Reutilizado tal cual, re-parametrizado vía `configs/xgpon.json` |
+| `simulator/dba_qos.py` | Sin cambios de código | Reutilizado tal cual, re-parametrizado vía `configs/default.json` |
 | `simulator/olt.py`, `tcont.py`, `traffic.py` | Sin cambios | Reutilizados tal cual (Fase 2) |
-| `configs/xgpon.json` | **Nuevo** | Parámetros XG-PON1, T-CONTs ×8, tabla `sla`, bloques `ipact`/`giant` |
-| `configs/scenarios_xgpon.json` | **Nuevo** | 9 escenarios (3 algoritmos × 3 cargas T-CONT4) |
-| `main_xgpon.py` | **Nuevo** | CLI `--algorithm {ipact,giant,qos}`, wiring condicional (ver §11) |
-| `run_experiments_xgpon.py` | **Nuevo** | Corre los 9 escenarios × 10 repeticiones (paralelizado) |
-| `analysis/analyze_xgpon.py` | **Nuevo** | 6 gráficos en `figures/xgpon/` |
+| `configs/default.json` | **Nuevo** | Parámetros XG-PON1, T-CONTs ×8, tabla `sla`, bloques `ipact`/`giant` |
+| `configs/scenarios.json` | **Nuevo** | 9 escenarios (3 algoritmos × 3 cargas T-CONT4) |
+| `main.py` | **Nuevo** | CLI `--algorithm {ipact,giant,qos}`, wiring condicional (ver §11) |
+| `run_experiments.py` | **Nuevo** | Corre los 9 escenarios × 10 repeticiones (paralelizado) |
+| `analysis/analyze.py` | **Nuevo** | 6 gráficos en `figures/` |
 
 Todos los archivos de Fase 2 (`configs/default.json`, `dba_basic.py`,
 `dba_qos.py`, `scenarios.json`, `main.py`, `run_experiments.py`,
@@ -159,12 +159,12 @@ cambios de Fase 3.
 
 ### 2.2 Dos caminos de ejecución
 
-Fase 3 introduce una **bifurcación arquitectónica** en `main_xgpon.py`,
+Fase 3 introduce una **bifurcación arquitectónica** en `main.py`,
 según el algoritmo:
 
 ```
                     ┌─────────────┐
-                    │  main_xgpon  │
+                    │  main  │
                     └──────┬───────┘
                            │
             algoritmo == "ipact" ?
@@ -221,7 +221,7 @@ condicionalmente (§11).
 
 ## 4. T-CONTs
 
-### 4.1 Tabla de parámetros (Fase 3, `configs/xgpon.json`)
+### 4.1 Tabla de parámetros (Fase 3, `configs/default.json`)
 
 | | T-CONT1 (VoIP/control) | T-CONT2 (Video) | T-CONT4 (Best Effort) |
 |---|---|---|---|
@@ -269,7 +269,7 @@ Sin cambios de código respecto a Fase 2
 (`DOCUMENTACION_TECNICA.md` §5: `CBRTrafficGen`, `PoissonTrafficGen`,
 `ParetoTrafficGen` en `simulator/traffic.py`). Lo que cambia son los
 **parámetros** (tasas ×8 para T2/T4, ver §4.2), pasados vía
-`configs/xgpon.json`.
+`configs/default.json`.
 
 Recordatorio de las 3 distribuciones:
 
@@ -388,7 +388,7 @@ on_poll_next():
     schedule(OLT_SEND_GATE, {onu_id: poll_ptr})
 ```
 
-**Parámetros** (`configs/xgpon.json` → `ipact`):
+**Parámetros** (`configs/default.json` → `ipact`):
 - `b_max_bytes = 38880` (= 1 trama XG-PON = 125 μs de transmisión)
 - `guard_time_s = 1e-6` (1 μs, valor típico de guard band EPON/IPACT)
 
@@ -456,7 +456,7 @@ allocate(onu_reports, capacity=38880, num_onus=8, config):
     spa_rr_ptr = (last_serviced + 1) mod 8
 ```
 
-**Parámetros** (`configs/xgpon.json` → `giant`): `SImax=8` tramas (1 ms) para
+**Parámetros** (`configs/default.json` → `giant`): `SImax=8` tramas (1 ms) para
 T-CONT2, `SImin=32` tramas (4 ms) para T-CONT4. Jerarquía `SImax << SImin`
 (GPA > SPA).
 
@@ -522,7 +522,7 @@ próxima trama → round-robin continuo bajo sobrecarga sostenida.
 documentado en `DOCUMENTACION_TECNICA.md` §7.2). Mismo algoritmo de 3 pasos
 (T1 fijo incondicional → T2 demand-based con `fair_share = remaining/num_onus`
 → T4 proporcional a la demanda). Lo que cambia son los **parámetros** vía
-`configs/xgpon.json`:
+`configs/default.json`:
 
 | Parámetro | Fase 2 | Fase 3 |
 |---|---|---|
@@ -575,15 +575,15 @@ Globales (solo si `record_cycle_time()` fue llamado, i.e. solo IPACT):
 `sla_compliance_pct` a cada fila por-paquete (mismo patrón que
 `bytes_delivered`, ya repetido por fila en Fase 2). `cycle_time_samples` NO
 va en `export_csv()` por fila (es global) — se exporta aparte en
-`results/xgpon_cycle_times.csv` vía `run_experiments_xgpon.py`.
+`results/cycle_times.csv` vía `run_experiments.py`.
 
 **Nota de implementación (bug corregido durante este trabajo):**
 `cycle_time_samples` se almacena internamente en **segundos**
 (`self._cycle_times.append((sim_time, cycle_time_s))`,
 `metrics/collector.py` línea 59), mientras que `cycle_time_mean_us` etc. ya
-vienen multiplicados por `1e6`. `run_experiments_xgpon.py` debe multiplicar
+vienen multiplicados por `1e6`. `run_experiments.py` debe multiplicar
 cada muestra de `cycle_time_samples` por `1e6` al escribir
-`xgpon_cycle_times.csv` (columna `cycle_time_us`) — la primera versión del
+`cycle_times.csv` (columna `cycle_time_us`) — la primera versión del
 script no lo hacía, lo que dejaba `cycle_time_distribution.png` vacío (todas
 las muestras ≈0 en una escala de microsegundos). Corregido antes de generar
 los gráficos finales (§13).
@@ -600,7 +600,7 @@ cambios.
 
 ## 9. Parámetros de Configuración
 
-### 9.1 `configs/xgpon.json` — bloques nuevos/relevantes
+### 9.1 `configs/default.json` — bloques nuevos/relevantes
 
 ```json
 {
@@ -641,7 +641,7 @@ cambios.
 Bloques `gpon`/`tconts` para T-CONT1/2/4 documentados en §1/§4. `sla`,
 `ipact`, `giant` son **nuevos** respecto a `configs/default.json` (Fase 2).
 
-### 9.2 `configs/scenarios_xgpon.json` — 9 escenarios
+### 9.2 `configs/scenarios.json` — 9 escenarios
 
 3 algoritmos × 3 cargas de T-CONT4 (subconjunto representativo del barrido
 ×8 de Fase 2, ver §4.2):
@@ -690,7 +690,7 @@ cambios** — son parte del motor reutilizado.
 
 ## 11. Flujo de Ejecución
 
-### 11.1 Wiring condicional en `main_xgpon.py::run_simulation()`
+### 11.1 Wiring condicional en `main.py::run_simulation()`
 
 ```python
 # Común a los 3 algoritmos:
@@ -733,15 +733,15 @@ Idéntico a Fase 2 (`DOCUMENTACION_TECNICA.md` §11.1/§11.4), salvo:
 - Para IPACT, `OLTPolling.__init__` agenda el primer `EVT_OLT_SEND_GATE`
   para la ONU 0 en `t=0` (en vez de `EVT_OLT_BWMAP`).
 
-### 11.3 Ejecución de experimentos (`run_experiments_xgpon.py`)
+### 11.3 Ejecución de experimentos (`run_experiments.py`)
 
-Por cada uno de los 9 escenarios (`configs/scenarios_xgpon.json`), corre 10
-repeticiones (`seed = 6767 + rep`) vía `main_xgpon.run_simulation()`,
+Por cada uno de los 9 escenarios (`configs/scenarios.json`), corre 10
+repeticiones (`seed = 6767 + rep`) vía `main.run_simulation()`,
 paralelizado con `multiprocessing.Pool(processes=9)`. Agrega resultados por
 `(scenario, tcont_type)` con media + IC95% sobre las 10 repeticiones →
-`results/xgpon_results.csv` (27 filas = 9 escenarios × 3 T-CONT). Para
+`results/results.csv` (27 filas = 9 escenarios × 3 T-CONT). Para
 escenarios `ipact`, además vuelca `cycle_time_samples` (×1e6 para
-microsegundos) a `results/xgpon_cycle_times.csv`.
+microsegundos) a `results/cycle_times.csv`.
 
 ---
 
@@ -798,8 +798,8 @@ DBRu, G.984.3 §9): ver `DOCUMENTACION_TECNICA.md` §12.
 ## 13. Apéndice — Resultados de la Corrida Completa
 
 Corrida: 9 escenarios × 10 repeticiones × 10 s (1 s warmup), seeds
-`6767..6776`. Fuente: `results/xgpon_results.csv`,
-`results/xgpon_cycle_times.csv`. Gráficos: `figures/xgpon/*.png` (6
+`6767..6776`. Fuente: `results/results.csv`,
+`results/cycle_times.csv`. Gráficos: `figures/*.png` (6
 archivos). Tabla resumen @ 800 Mbps/ONU y discusión completa en
 [`PARA_LA_PROFE_FASE3.md`](PARA_LA_PROFE_FASE3.md) §6.
 
