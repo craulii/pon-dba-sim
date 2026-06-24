@@ -8,6 +8,12 @@ entregas/**/*.aux
 entregas/**/*.log
 entregas/**/*.out
 entregas/**/*.toc
+entregas/**/*.nav
+entregas/**/*.snm
+entregas/**/*.vrb
+entregas/**/*.fls
+entregas/**/*.fdb_latexmk
+entregas/**/*.synctex.gz
 
 # Windows Zone.Identifier
 *.Zone.Identifier

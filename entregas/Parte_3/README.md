@@ -4,8 +4,19 @@
 Pivote pedido por la profesora tras la reunión del 9/6/2026: XG-PON1 (ITU-T
 G.987), 8 ONUs idénticas, comparación de 3 algoritmos DBA (IPACT, GIANT,
 QoSDBA) bajo una tabla de SLA por T-CONT (T-CONT1 ≤ 2 ms como meta
-principal). Es **aditivo** a la Fase 2 (`entregas/Parte_2/`), que no se
-modifica.
+principal). Es **aditivo** a la Fase 2 (archivada en `legacy/fase2/`), que
+no se modifica.
+
+## Presentación
+
+- [`presentacion/presentacion.tex`](presentacion/presentacion.tex) /
+  `presentacion.pdf` — deck Beamer (tema Madrid) para mostrarle a la
+  profesora: cómo funciona el simulador, SLA, T-CONTs, los 3 algoritmos y
+  los gráficos principales. Compilar con `pdflatex` (×2) desde dentro de
+  `presentacion/`.
+- [`presentacion/guion_equipo.md`](presentacion/guion_equipo.md) — notas
+  internas del equipo (no es un libreto) para repasar antes de presentar
+  y tener a mano en la sesión de preguntas.
 
 ## Documentación
 

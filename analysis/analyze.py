@@ -208,13 +208,21 @@ def plot_cycle_time_distribution(cycle_data):
     fig.suptitle("Polling de ciclo variable (IPACT) vs trama fija 125 μs (GIANT/QoSDBA)",
                   fontsize=13)
 
+    # Rango fijo 0-1100us (techo teorico = 8*(125+1) = 1008us): bajo
+    # saturacion el ciclo es practicamente constante (varianza ~1e-9us de
+    # ruido de punto flotante), y un rango auto-ajustado al min/max de los
+    # datos generaria bins mas finos que un pixel -- invisibles aunque la
+    # barra "este ahi".
+    CYCLE_RANGE = (0, 1100)
     for ax, load in zip(axes, LOADS):
         samples = [r["cycle_time_us"] for r in cycle_data
                    if r["load_mbps"] == load and r["algorithm"] == "ipact"]
         if samples:
-            ax.hist(samples, bins=40, color=C_IPACT, alpha=0.75, label="IPACT (ciclo variable)")
+            ax.hist(samples, bins=44, range=CYCLE_RANGE, color=C_IPACT, alpha=0.75,
+                    label="IPACT (ciclo variable)")
         ax.axvline(FRAME_US, color="black", linestyle="--", linewidth=1.5,
                    label="Trama fija (125 μs)")
+        ax.set_xlim(CYCLE_RANGE)
         ax.set_title(f"Carga = {load} Mbps/ONU")
         ax.set_xlabel("Duración de ciclo (μs)")
         if ax is axes[0]:
