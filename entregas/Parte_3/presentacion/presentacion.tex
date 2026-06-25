@@ -49,6 +49,28 @@
     \tableofcontents
 \end{frame}
 
+\section{Introducción}
+
+\begin{frame}{Motivación}
+    \textbf{Proyecto 2 (Fase 2):} simulamos GPON ITU-T G.984, 32 ONUs,
+    comparando un DBA proporcional contra uno con QoS por T-CONT.
+
+    \vspace{0.2cm}
+    \textbf{Pivote a esta Fase 3} (reunión con la profesora, 9/6/2026):
+    \begin{itemize}
+        \item Migrar a \textbf{XG-PON1 (ITU-T G.987)}, el sucesor 10G de GPON
+        \item Reducir a \textbf{8 ONUs idénticas} y exigir una meta de SLA
+              explícita para VoIP ($\leq$ 2 ms)
+        \item Comparar \textbf{IPACT} (polling de EPON, usado a propósito
+              como referencia) contra dos algoritmos nativos de PON
+              (\textbf{GIANT}, \textbf{QoSDBA})
+    \end{itemize}
+
+    \vspace{0.2cm}
+    Pregunta que motiva todo el proyecto: \textbf{¿el algoritmo de DBA
+    importa para que una llamada de voz cumpla su SLA de latencia?}
+\end{frame}
+
 \section{El problema}
 
 \begin{frame}{Por qué hace falta un algoritmo}
@@ -207,6 +229,12 @@
 \section{El simulador}
 
 \begin{frame}{Arquitectura del simulador}
+    \footnotesize
+    \textbf{Python 3 puro}, sin frameworks de simulación (sin SimPy, sin
+    OMNeT++): solo \texttt{heapq} de la librería estándar para la cola de
+    eventos.
+
+    \vspace{0.2cm}
     \begin{center}
     \begin{tikzpicture}[
         box/.style={draw, rounded corners, align=center, minimum height=0.85cm,
@@ -226,6 +254,55 @@
     OLT y ONUs se hablan en los dos sentidos a través del canal:
     asignación hacia abajo, datos y reportes hacia arriba. El motor de
     eventos es lo que hace que todo eso pase en el momento correcto.
+\end{frame}
+
+\begin{frame}{Estado del sistema y entidades}
+    \footnotesize
+    \textbf{Entidades y atributos:}
+    \begin{itemize}
+        \item \textbf{OLT}: reportes recibidos por ONU, número de trama actual
+        \item \textbf{ONU}: un \texttt{TCont} por tipo (1, 2, 4)
+        \item \textbf{TCont}: buffer FIFO, bytes encolados, contadores de
+              paquetes/bytes generados y descartados
+        \item \textbf{Paquete}: ONU de origen, tipo de T-CONT, tamaño,
+              instante de creación
+        \item \textit{Solo en GIANT}: contadores de turno SImax/SImin por ONU.
+              \textit{Solo en IPACT}: índice de la ONU que se está sondeando
+    \end{itemize}
+
+    \vspace{0.2cm}
+    \textbf{Estado del sistema} en el instante $t$: ocupación de cada
+    buffer T-CONT de cada ONU, último reporte (DBRu) conocido por la OLT
+    de cada ONU, y los contadores de turno/posición de polling vigentes.
+    Ese estado es lo único que el DBA necesita para decidir el siguiente
+    BWmap o GATE.
+\end{frame}
+
+\begin{frame}{Eventos futuros (FEL) y condición de término}
+    \footnotesize
+    \begin{table}
+        \footnotesize
+        \renewcommand{\arraystretch}{1.2}
+        \begin{tabular}{ll}
+            \toprule
+            Evento & Dispara \\
+            \midrule
+            \texttt{ONU\_GENERATE\_TRAFFIC} & encola paquete, se reagenda a sí mismo \\
+            \texttt{OLT\_GENERATE\_BWMAP} & DBA broadcast (GIANT/QoSDBA), cada 125 $\mu$s \\
+            \texttt{ONU\_RECEIVE\_BWMAP} & ONU transmite + envía DBRu \\
+            \texttt{OLT\_SEND\_GATE} / \texttt{POLL\_NEXT} & DBA polling (IPACT), por ONU \\
+            \texttt{ONU\_RECEIVE\_GATE} & ONU transmite + envía DBRu (IPACT) \\
+            \texttt{OLT\_RECEIVE\_DATA} & mide latencia, registra entrega \\
+            \texttt{OLT\_RECEIVE\_REPORT} & actualiza el reporte de esa ONU \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+
+    \textbf{Condición de término:} tiempo fijo de simulación
+    $[0, T]$ con $T=10$ s, descartando el primer segundo (\textit{warmup},
+    8000 tramas) para evitar medir el transitorio de buffers vacíos. Cada
+    escenario se corre \textbf{10 veces} con semillas distintas
+    (6767-6776) para poder calcular intervalos de confianza.
 \end{frame}
 
 \begin{frame}{El loop del simulador, paso a paso}
@@ -282,6 +359,27 @@ funcion generar_paquete(onu, tcont):
 
 \section{Experimentos}
 
+\begin{frame}{Entradas del simulador: de dónde vienen}
+    \footnotesize
+    \begin{itemize}
+        \item \textbf{Parámetros físicos} (tasa, trama, bytes/trama,
+              delay) $\rightarrow$ \textbf{ITU-T G.987.1/2/3}, sin
+              inventar valores
+        \item \textbf{Tasas de tráfico T-CONT1/T-CONT2} $\rightarrow$
+              heredadas de Fase 2, T-CONT2 escalado $\times 8$ para
+              mantener el mismo \% de capacidad (12.86\%) que con 32 ONUs
+        \item \textbf{Cargas de T-CONT4} (200/400/800 Mbps por ONU)
+              $\rightarrow$ barrido propio del equipo, mismas razones de
+              sobrecarga (64\%/129\%/257\%) que en Fase 2
+        \item \textbf{Tabla de SLA} $\rightarrow$ T-CONT1 $\leq$ 2 ms es
+              pedido explícito de la profesora; T-CONT2/T-CONT4 son metas
+              razonables propuestas por el equipo, no normas del estándar
+        \item \textbf{Contadores de GIANT} (SImax=8, SImin=32 tramas)
+              $\rightarrow$ interpretación propia de la semántica de
+              service-interval de G.987.3, el estándar no fija un valor único
+    \end{itemize}
+\end{frame}
+
 \begin{frame}{Diseño experimental}
     \begin{itemize}
         \item 3 algoritmos (IPACT, GIANT, QoSDBA) $\times$ 3 cargas de
@@ -295,6 +393,28 @@ funcion generar_paquete(onu, tcont):
 \end{frame}
 
 \section{Resultados}
+
+\begin{frame}{Validación: cotas teóricas vs. simulación}
+    \footnotesize
+    No es una cola M/M/1 clásica (los grants son deterministas o por
+    contador), pero sí hay 2 cotas cerradas que se pueden derivar y
+    contrastar directamente:
+
+    \vspace{0.2cm}
+    \textbf{(a) Ciclo de polling IPACT:}
+    $[N \cdot t_{guard},\; N \cdot (B_{max} \cdot 8/R + t_{guard})]
+    = [8\,\mu s,\; 1008\,\mu s]$.
+    Medido: máximo exactamente \textbf{1008.000 $\mu$s} bajo saturación
+    (400/800 Mbps/ONU) — calza exacto con la cota teórica.
+
+    \vspace{0.2cm}
+    \textbf{(b) Latencia de T-CONT1 en GIANT/QoSDBA} (grant fijo
+    incondicional + CBR): $L_{max} = T_{trama} + T_{prop} + T_{tx}
+    = 125 + 100 + 1.03 = \textbf{226.03}\,\mu s$.
+    Medido: \textbf{226.0288 $\mu$s}, con \textbf{IC95\%=0} (sin
+    aleatoriedad en ese camino) — confirma que la cota es exacta, no una
+    aproximación.
+\end{frame}
 
 \begin{frame}{Resultado central: cumplimiento del SLA}
     \begin{center}
@@ -325,6 +445,26 @@ funcion generar_paquete(onu, tcont):
     usan siempre la trama fija de 125 $\mu$s.
 \end{frame}
 
+\begin{frame}{Confiabilidad estadística}
+    \footnotesize
+    \begin{itemize}
+        \item \textbf{10 réplicas i.i.d.} por escenario (semillas
+              6767-6776), 1 s de \textit{warmup} descartado de 10 s
+              simulados, siguiendo Law \& Kelton (2000)
+        \item IC95\% calculado como $\bar{y} \pm 1.96 \cdot s/\sqrt{10}$
+              sobre las 10 réplicas, reportado para cada métrica en
+              \texttt{results.csv}
+        \item \textbf{Ejemplo de error relativo} (IC95 / media)
+              en T-CONT1, IPACT a 400 Mbps/ONU: latencia media
+              $1613.08 \pm 0.33\,\mu s$ $\rightarrow$ error relativo
+              $\approx 0.02\%$ — variabilidad entre réplicas muy baja
+        \item Donde el algoritmo es determinista (T-CONT1 bajo
+              GIANT/QoSDBA), el IC95\% es exactamente \textbf{0}: no hay
+              fuente de aleatoriedad en ese camino, las 10 réplicas son
+              idénticas
+    \end{itemize}
+\end{frame}
+
 \section{Conclusiones}
 
 \begin{frame}{Conclusiones}
@@ -339,6 +479,13 @@ funcion generar_paquete(onu, tcont):
         \item Esto tiene un costo: QoSDBA es más simple pero pierde
               eficiencia en el tráfico de datos (ver apéndice)
     \end{itemize}
+
+    \vspace{0.2cm}
+    \footnotesize
+    \textbf{Trabajo futuro:} ranging dinámico (ONUs a distancias
+    distintas, RTT variable en vez de fijo), GIANT operando a nivel
+    T-CONT en vez de 1:1 con la ONU, más de un T-CONT del mismo tipo por
+    ONU, y ONUs heterogéneas (distintos perfiles de tráfico simultáneos).
 \end{frame}
 
 \begin{frame}

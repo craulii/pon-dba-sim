@@ -7,6 +7,15 @@ QoSDBA) bajo una tabla de SLA por T-CONT (T-CONT1 ≤ 2 ms como meta
 principal). Es **aditivo** a la Fase 2 (archivada en `legacy/fase2/`), que
 no se modifica.
 
+## Informe final
+
+- [`informe/informe.tex`](informe/informe.tex) / `informe.pdf` — informe en
+  plantilla IEEE Conferencia (doble columna, `IEEEtran`), 6 páginas: las 9
+  secciones pedidas (introducción, sistema simulado, modelo DES, implementación,
+  resultados con validación teórica + experimentos + análisis estadístico,
+  conclusiones, referencias). Compilar con `pdflatex` (×2) desde dentro de
+  `informe/`.
+
 ## Presentación
 
 - [`presentacion/presentacion.tex`](presentacion/presentacion.tex) /
