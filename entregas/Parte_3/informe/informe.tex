@@ -105,8 +105,8 @@ futuro.
 \subsection{Red XG-PON1}
 
 XG-PON1 (ITU-T G.987) es el sucesor de 10 Gbps de GPON: mantiene la trama
-de control GTC de 125 $\mu$s de G.984.3 pero duplica la tasa ascendente y
-cuadruplica la descendente \cite{itu987-1,itu987-2,itu987-3}. La Tabla
+de control GTC de 125 $\mu$s de G.984.3 \cite{itu984-3} pero duplica la
+tasa ascendente y cuadruplica la descendente \cite{itu987-1,itu987-2,itu987-3}. La Tabla
 \ref{tab:fisicos} resume los parámetros físicos usados, todos derivados
 del estándar, sin valores inventados.
 
@@ -339,9 +339,10 @@ Módulo & Responsabilidad \\
 \end{table}
 
 Una decisión de diseño central fue mantener Fase 2 (GPON, 32 ONUs)
-intacta y construir Fase 3 de forma aditiva: la OLT y la ONU del
-camino broadcast (\texttt{olt.py}, \texttt{onu.py}) se reutilizan sin
-cambios para GIANT y QoSDBA, mientras que IPACT introduce un camino de
+intacta y construir Fase 3 de forma aditiva: el camino broadcast que usan
+GIANT y QoSDBA (\texttt{olt.py}, y la lógica de \texttt{onu.py} que
+procesa el BWmap) queda igual que en Fase 2, mientras que IPACT introduce
+un camino de
 ejecución alternativo y mutuamente excluyente (\texttt{olt\_ipact.py})
 que hace polling secuencial round-robin de las 8 ONUs, otorgando a cada
 una un grant de servicio limitado: $\text{grant} = \min(\text{demanda
@@ -349,17 +350,28 @@ reportada}, B_{max})$, con $B_{max}=38\,880$ B (una trama XG-PON
 completa), siguiendo el servicio \emph{limited} de Kramer et al.
 \cite{kramer2002}.
 
-GIANT implementa dos fases: GPA (\emph{Guaranteed Phase Allocation},
-T-CONT1 fijo e incondicional, T-CONT2 con contador SImax) y SPA
-(\emph{Surplus Phase Allocation}, T-CONT4 con contador SImin). Durante
+GIANT implementa dos fases \cite{giant}: GPA (\emph{Guaranteed Phase
+Allocation}, T-CONT1 fijo e incondicional, T-CONT2 con contador SImax) y
+SPA (\emph{Surplus Phase Allocation}, T-CONT4 con contador SImin). Durante
 las pruebas de humo se identificaron y corrigieron dos sesgos de equidad
 propios de la implementación: (1) sin escalonar el contador de T-CONT2
 por ONU, las 8 ONUs competían simultáneamente cada SImax tramas,
 sesgando el servicio por orden de iteración; y (2) sin corregir el
 puntero \emph{round-robin} de SPA para avanzar solo hasta la última ONU
 efectivamente servida, una ONU podía quedar postergada indefinidamente
-bajo sobrecarga sostenida. Ambas correcciones son contribuciones propias
-del equipo, documentadas como tales.
+bajo sobrecarga sostenida. Estas dos correcciones son contribuciones
+propias del equipo, documentadas como tales.
+
+Durante las pruebas de humo también se encontró un error de
+implementación con un impacto mucho mayor: el contador de T-CONT4 se
+reiniciaba a SImin tras cualquier grant mayor a cero, incluso si la ONU
+seguía congestionada. Esto generaba un \emph{duty cycle} sincronizado en
+el que solo 8 de cada 32 tramas repartían ancho de banda de T-CONT4 entre
+las 8 ONUs. El arreglo fue condicionar el reinicio del contador a que la
+cola quedara realmente drenada (\texttt{grant} $\geq$ \texttt{demand}).
+En una corrida de prueba a 400 Mbps/ONU, esto llevó la utilización del
+canal de 36.2\% a 99.3\%, y el throughput de T-CONT4 de 485 a
+2014 Mbps.
 
 El Listado \ref{lst:ipact} resume el cálculo del grant de IPACT (servicio
 \emph{limited}, aplicado una vez por ONU sondeada) y el Listado
