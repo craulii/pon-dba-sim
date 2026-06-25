@@ -228,6 +228,12 @@
     eventos es lo que hace que todo eso pase en el momento correcto.
 \end{frame}
 
+\begin{frame}{El loop del simulador, paso a paso}
+    \begin{center}
+        \includegraphics[height=0.8\textheight]{architecture_diagram.png}
+    \end{center}
+\end{frame}
+
 \begin{frame}[fragile]{El motor de eventos discretos}
     No hay un reloj que avanza de a poco. Hay una lista de eventos
     futuros, ordenada por tiempo, y el simulador salta directo al
