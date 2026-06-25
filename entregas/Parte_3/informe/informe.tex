@@ -32,6 +32,11 @@
     showstringspaces=false,
 }
 
+\AtBeginDocument{%
+  \setlength{\abovecaptionskip}{6pt}
+  \setlength{\belowcaptionskip}{8pt}
+}
+
 \begin{document}
 
 \title{Simulador XG-PON1: Cumplimiento de SLA bajo IPACT, GIANT y QoSDBA}
@@ -314,17 +319,21 @@ los módulos de la Tabla \ref{tab:modulos}.
 \centering
 \caption{Módulos principales}
 \label{tab:modulos}
-\begin{tabular}{ll}
+\footnotesize
+\begin{tabular}{p{3.2cm}p{4.0cm}}
 \toprule
 Módulo & Responsabilidad \\
 \midrule
 \texttt{engine.py} & Motor DES (heap de eventos, loop principal) \\
-\texttt{onu.py} / \texttt{tcont.py} & ONUs, T-CONTs, buffers \\
-\texttt{olt.py} / \texttt{olt\_ipact.py} & OLT camino broadcast / polling \\
-\texttt{dba\_giant.py}, \texttt{dba\_ipact.py}, \texttt{dba\_qos.py} & Los 3 algoritmos DBA \\
+\texttt{onu.py}, \texttt{tcont.py} & ONUs, T-CONTs, buffers \\
+\texttt{olt.py}, \texttt{olt\_ipact.py} & OLT camino broadcast / polling \\
+\texttt{dba\_giant.py} & Algoritmo GIANT \\
+\texttt{dba\_ipact.py} & Algoritmo IPACT \\
+\texttt{dba\_qos.py} & Algoritmo QoSDBA \\
 \texttt{traffic.py} & Generadores CBR/Poisson/Pareto \\
 \texttt{metrics/collector.py} & Latencia, SLA, throughput, jitter \\
-\texttt{main.py}, \texttt{run\_experiments.py} & CLI y orquestación de escenarios \\
+\texttt{main.py} & CLI de una corrida individual \\
+\texttt{run\_experiments.py} & Orquestación de los 9 escenarios \\
 \bottomrule
 \end{tabular}
 \end{table}
