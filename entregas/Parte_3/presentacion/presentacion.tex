@@ -52,42 +52,61 @@
 \section{Introducción}
 
 \begin{frame}{Motivación}
-    \textbf{Proyecto 2 (Fase 2):} simulamos GPON ITU-T G.984, 32 ONUs,
-    comparando un DBA proporcional contra uno con QoS por T-CONT.
+    En una red de fibra óptica compartida (PON), todos los usuarios
+    comparten el mismo canal de subida hacia la central.
 
     \vspace{0.2cm}
-    \textbf{Pivote a esta Fase 3} (reunión con la profesora, 9/6/2026):
+    El problema: por ese canal compiten servicios muy distintos:
     \begin{itemize}
-        \item Migrar a \textbf{XG-PON1 (ITU-T G.987)}, el sucesor 10G de GPON
-        \item Reducir a \textbf{8 ONUs idénticas} y exigir una meta de SLA
-              explícita para VoIP ($\leq$ 2 ms)
-        \item Comparar \textbf{IPACT} (polling de EPON, usado a propósito
-              como referencia) contra dos algoritmos nativos de PON
-              (\textbf{GIANT}, \textbf{QoSDBA})
+        \item \textbf{VoIP}: paquetes pequeños, tasa fija, necesita llegar
+              en menos de 2 ms o la llamada se degrada
+        \item \textbf{Video}: tráfico variable, latencia tolerable de $\sim$20 ms
+        \item \textbf{Datos}: ráfagas impredecibles, sin restricción estricta
     \end{itemize}
 
     \vspace{0.2cm}
-    Pregunta que motiva todo el proyecto: \textbf{¿el algoritmo de DBA
-    importa para que una llamada de voz cumpla su SLA de latencia?}
+    Alguien tiene que decidir, trama por trama, quién transmite y cuánto.
+    Esa decisión es el \textbf{DBA} (Dynamic Bandwidth Allocation).
+
+    \vspace{0.2cm}
+    \textbf{Pregunta central:} ¿el algoritmo de DBA importa para que una
+    llamada de voz cumpla su SLA de latencia?
 \end{frame}
 
-\section{El problema}
-
-\begin{frame}{Por qué hace falta un algoritmo}
-    Una PON conecta una central (OLT) con varios usuarios (ONUs) usando un
-    solo cable de fibra, repartido por un splitter pasivo.
-
-    \begin{itemize}
-        \item Bajada (OLT a ONUs): no hay problema, la señal le llega a todos.
-        \item Subida (ONUs a OLT): todas las ONUs comparten el mismo canal,
-              solo una puede transmitir a la vez.
-    \end{itemize}
-
-    \vspace{0.3cm}
-    Si por ese mismo canal compiten cosas muy distintas, como una llamada
-    de voz y una descarga pesada, alguien tiene que decidir quién
-    transmite y en qué momento. Esa decisión es el corazón de este
-    proyecto.
+\begin{frame}{¿Qué estamos simulando?}
+    \begin{columns}[t]
+        \column{0.48\textwidth}
+        \textbf{Sistema}
+        \begin{itemize}
+            \item Red XG-PON1: 1 OLT + 8 ONUs
+            \item Canal upstream compartido\\(2.48 Gbps, trama de 125 $\mu$s)
+            \item 3 tipos de tráfico simultáneo por ONU
+        \end{itemize}
+        \column{0.48\textwidth}
+        \textbf{Lo que se estudia}
+        \begin{itemize}
+            \item 3 algoritmos de asignación de ancho de banda (DBA)
+            \item ¿Cuál cumple mejor el SLA de VoIP ($\leq$ 2 ms)?
+            \item Bajo cargas de 64\%, 129\% y 257\% de capacidad
+        \end{itemize}
+    \end{columns}
+    \vspace{0.35cm}
+    \begin{center}
+    \footnotesize
+    \begin{tabular}{lll}
+        \toprule
+        Entrada & Variable independiente & Salida \\
+        \midrule
+        Parámetros ITU-T G.987 & Algoritmo DBA & Latencia por T-CONT \\
+        Tasas de tráfico T-CONT & Carga T-CONT4 & Cumplimiento SLA \\
+        Semillas ($\times$10 réplicas) & & Throughput, pérdida \\
+        \bottomrule
+    \end{tabular}
+    \end{center}
+    \vspace{0.15cm}
+    \begin{block}{}
+    \small No simulamos el tráfico en sí, sino el \textbf{proceso de decisión} que ocurre cada 125\,$\mu$s: \emph{«de los 38\,880 bytes disponibles, ¿cuánto le doy a cada ONU?»}. El tráfico es la carga que complica esa decisión; los algoritmos DBA son las estrategias; la consecuencia medida es si VoIP llega antes de 2\,ms.
+    \end{block}
 \end{frame}
 
 \section{La red simulada}
@@ -123,90 +142,51 @@
     \end{columns}
 \end{frame}
 
-\section{T-CONTs}
+\section{T-CONTs y SLA}
 
-\begin{frame}{T-CONTs: qué son y cuáles usamos}
-    En vez de tener una sola cola para todo el tráfico de una ONU, GPON y
-    XG-PON definen \textbf{T-CONTs} (Transmission Containers): una cola
-    distinta por tipo de servicio, cada una con su propia prioridad.
-
-    \vspace{0.3cm}
-    \begin{table}
-        \footnotesize
-        \renewcommand{\arraystretch}{1.3}
-        \begin{tabular}{lccc}
-            \toprule
-            T-CONT & Tráfico & Tasa & Paquete \\
-            \midrule
-            T-CONT1 (VoIP) & CBR (fijo) & 1 Mbps & 160 B \\
-            T-CONT2 (Video) & Poisson & 40 Mbps & 1000 B \\
-            T-CONT4 (Datos) & Pareto ($\alpha$=1.5) & 200 a 800 Mbps\footnotemark & 1400 B \\
-            \bottomrule
-        \end{tabular}
-    \end{table}
-    \footnotetext{Varía según el escenario de carga, ver diseño experimental}
-\end{frame}
-
-\section{El SLA}
-
-\begin{frame}{El SLA: qué es y por qué importa}
-    Un SLA acá es simple: una cota máxima de latencia. Si un paquete llega
-    más tarde que esa cota, se considera que el servicio falló para ese
-    paquete.
-
-    \vspace{0.3cm}
-    \begin{table}
-        \footnotesize
-        \renewcommand{\arraystretch}{1.3}
-        \begin{tabular}{lcl}
-            \toprule
-            T-CONT & Cota & Origen \\
-            \midrule
-            \textbf{T-CONT1 (VoIP)} & \textbf{$\leq$ 2 ms} & \textbf{Pedido explícito de la profesora} \\
-            T-CONT2 (Video) & $\leq$ 20 ms & Meta razonable del equipo \\
-            T-CONT4 (Datos) & $\leq$ 500 ms & Cota laxa, solo de referencia \\
-            \bottomrule
-        \end{tabular}
-    \end{table}
-
-    \vspace{0.2cm}
-    La que de verdad nos interesa demostrar es la de T-CONT1. Las otras
-    dos no son normas del estándar, son metas que pusimos nosotros para
-    tener algo con qué comparar.
-\end{frame}
-
-\section{El problema del DBA}
-
-\begin{frame}{Dynamic Bandwidth Allocation}
-    Si cada ONU transmitiera cuando quisiera, habría choques en el canal.
-    Alguien tiene que decidir, trama por trama, quién transmite y cuánto.
-
-    \vspace{0.3cm}
-    Esa decisión se llama \textbf{DBA} (Dynamic Bandwidth Allocation), y
-    es la pregunta de investigación real de este proyecto: ¿qué tan bien
-    distintos algoritmos de DBA logran cumplir el SLA de voz?
-\end{frame}
-
-\begin{frame}{Dos formas de coordinar el canal}
+\begin{frame}{Tráfico simulado y SLA}
     \begin{columns}[t]
-        \column{0.48\textwidth}
-        \textbf{Broadcast (SR-DBA)}\\
-        \textit{usado por GIANT y QoSDBA}
-        \begin{itemize}
-            \item \footnotesize La OLT calcula la asignación de las 8 ONUs de una vez
-            \item \footnotesize La manda en un solo mensaje (BWmap), cada 125 $\mu$s exactos
-        \end{itemize}
-        \column{0.48\textwidth}
-        \textbf{Polling}\\
-        \textit{usado por IPACT}
-        \begin{itemize}
-            \item \footnotesize La OLT le habla a una ONU a la vez, en ronda
-            \item \footnotesize El ciclo completo dura lo que se necesite: entre 8 y 1008 $\mu$s
-        \end{itemize}
+        \column{0.52\textwidth}
+        \textbf{T-CONTs:} una cola por tipo de servicio
+        \vspace{0.2cm}
+        \begin{table}
+            \footnotesize
+            \renewcommand{\arraystretch}{1.3}
+            \begin{tabular}{lccc}
+                \toprule
+                T-CONT & Tráfico & Tasa & Pqt \\
+                \midrule
+                T-CONT1 (VoIP) & CBR & 1 Mbps & 160 B \\
+                T-CONT2 (Video) & Poisson & 40 Mbps & 1000 B \\
+                T-CONT4 (Datos) & Pareto & 200 a 800 Mbps & 1400 B \\
+                \bottomrule
+            \end{tabular}
+        \end{table}
+        \column{0.44\textwidth}
+        \textbf{SLA:} cota máxima de latencia
+        \vspace{0.2cm}
+        \begin{table}
+            \footnotesize
+            \renewcommand{\arraystretch}{1.3}
+            \begin{tabular}{lc}
+                \toprule
+                T-CONT & Cota \\
+                \midrule
+                \textbf{T-CONT1} & \textbf{$\leq$ 2 ms} \\
+                T-CONT2 & $\leq$ 20 ms \\
+                T-CONT4 & $\leq$ 500 ms \\
+                \bottomrule
+            \end{tabular}
+        \end{table}
+        \vspace{0.1cm}
+        \footnotesize La de T-CONT1 es la que importa demostrar.
     \end{columns}
 \end{frame}
 
 \begin{frame}{Los 3 algoritmos comparados}
+    Dos mecanismos: \textbf{broadcast} (BWmap cada 125 $\mu$s, todas las ONUs a la vez)
+    vs.\ \textbf{polling} (ciclo variable, ONU por ONU).
+    \vspace{0.15cm}
     \begin{table}
         \footnotesize
         \renewcommand{\arraystretch}{1.4}
@@ -221,12 +201,35 @@
         \end{tabular}
     \end{table}
 
-    \vspace{0.2cm}
-    \footnotesize IPACT es de EPON, otro estándar. Lo usamos a propósito
-    como punto de comparación, no porque XG-PON lo use de verdad.
 \end{frame}
 
 \section{El simulador}
+
+\begin{frame}{¿Cómo funciona el sistema? Un ciclo completo}
+    \begin{columns}[t]
+        \column{0.54\textwidth}
+        \textbf{Broadcast — GIANT y QoSDBA} (\textit{cada 125 $\mu$s}):
+        \begin{enumerate}\footnotesize
+            \item OLT mira reportes de las 8 ONUs (bytes en cola)
+            \item Calcula el BWmap: a cada ONU le asigna un slot de tiempo
+            \item Manda el BWmap a todas a la vez (100 $\mu$s de viaje)
+            \item Cada ONU transmite según su asignación e incluye un reporte nuevo
+            \item OLT recibe los datos, mide latencia, guarda el reporte
+            \item A los 125 $\mu$s, vuelve al paso 1
+        \end{enumerate}
+        \column{0.42\textwidth}
+        \textbf{Polling — IPACT} (\textit{ciclo variable}):
+        \begin{enumerate}\footnotesize
+            \item OLT envía un GATE a la ONU 0: "puedes enviar X bytes"
+            \item ONU 0 transmite (hasta X bytes) e incluye reporte
+            \item OLT recibe, envía GATE a ONU 1
+            \item \ldots (repite para ONUs 2 a 7)
+            \item Terminada la ronda, vuelve a ONU 0
+        \end{enumerate}
+        \vspace{0.15cm}
+        \footnotesize El tiempo de ronda depende de cuánto transmite cada ONU: entre 8 y 1008 $\mu$s.
+    \end{columns}
+\end{frame}
 
 \begin{frame}{Arquitectura del simulador}
     \footnotesize
@@ -346,50 +349,31 @@ funcion generar_paquete(onu, tcont):
     \end{itemize}
 \end{frame}
 
-\begin{frame}{Cómo se ve el tráfico simulado}
-    \begin{center}
-        \includegraphics[width=0.55\linewidth]{traffic_generation.png}
-    \end{center}
-    \footnotesize
-    Izquierda: línea de tiempo de arribos (cada marca es un paquete).
-    Derecha: histograma del intervalo entre paquetes. Las 3 tasas se
-    normalizaron a la misma media solo para esta figura, para comparar la
-    forma de cada distribución y no la velocidad.
-\end{frame}
-
 \section{Experimentos}
 
-\begin{frame}{Entradas del simulador: de dónde vienen}
+\begin{frame}{Entradas del simulador y diseño experimental}
     \footnotesize
     \begin{itemize}
         \item \textbf{Parámetros físicos} (tasa, trama, bytes/trama,
               delay) $\rightarrow$ \textbf{ITU-T G.987.1/2/3}, sin
               inventar valores
         \item \textbf{Tasas de tráfico T-CONT1/T-CONT2} $\rightarrow$
-              heredadas de Fase 2, T-CONT2 escalado $\times 8$ para
-              mantener el mismo \% de capacidad (12.86\%) que con 32 ONUs
+              T-CONT2 escalado $\times 8$ para mantener el mismo \% de
+              capacidad (12.86\%) que en una red con 32 ONUs
         \item \textbf{Cargas de T-CONT4} (200/400/800 Mbps por ONU)
-              $\rightarrow$ barrido propio del equipo, mismas razones de
-              sobrecarga (64\%/129\%/257\%) que en Fase 2
+              $\rightarrow$ 64\%, 129\% y 257\% de la capacidad disponible
         \item \textbf{Tabla de SLA} $\rightarrow$ T-CONT1 $\leq$ 2 ms es
               pedido explícito de la profesora; T-CONT2/T-CONT4 son metas
-              razonables propuestas por el equipo, no normas del estándar
+              propuestas por el equipo, no normas del estándar
         \item \textbf{Contadores de GIANT} (SImax=8, SImin=32 tramas)
-              $\rightarrow$ interpretación propia de la semántica de
-              service-interval de G.987.3, el estándar no fija un valor único
+              $\rightarrow$ interpretación propia de G.987.3; el estándar
+              no fija un valor único
     \end{itemize}
-\end{frame}
-
-\begin{frame}{Diseño experimental}
-    \begin{itemize}
-        \item 3 algoritmos (IPACT, GIANT, QoSDBA) $\times$ 3 cargas de
-              T-CONT4 (200, 400 y 800 Mbps por ONU, entre 64\% y 257\% de
-              la capacidad disponible)
-        \item 10 repeticiones por escenario, 10 segundos simulados cada
-              una (con 1 segundo de calentamiento que no se mide)
-        \item Se mide latencia, throughput, pérdida y cumplimiento de SLA
-              por cada ONU y cada T-CONT
-    \end{itemize}
+    \vspace{0.15cm}
+    \textbf{Diseño experimental:} 3 algoritmos $\times$ 3 cargas = 9 escenarios;
+    \textbf{10 réplicas} por escenario (semillas 6767-6776), 10 s simulados
+    (1 s de \textit{warmup} descartado). Salidas: latencia, throughput,
+    pérdida y cumplimiento de SLA por ONU y T-CONT.
 \end{frame}
 
 \section{Resultados}

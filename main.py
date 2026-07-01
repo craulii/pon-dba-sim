@@ -53,11 +53,7 @@ def build_config(base: dict, num_onus: int, tcont4_rate_bps: int,
 
 
 def run_simulation(config: dict, algorithm: str, seed: int,
-                   verbose: bool = False) -> dict:
-    """
-    Ejecuta una corrida completa del simulador XG-PON.
-    Retorna el dict de métricas calculadas.
-    """
+                   verbose: bool = False, demo: bool = False) -> dict:
     random.seed(seed)
 
     num_onus = config["gpon"]["num_onus"]
@@ -129,7 +125,28 @@ def run_simulation(config: dict, algorithm: str, seed: int,
         engine.register(EVT_ONU_RECV_BWMAP, dispatch_bwmap)
 
     # Correr simulación
-    processed = engine.run(until=duration)
+    sla_cfg = config.get("sla", {})
+
+    if demo:
+        def _demo_cb(t, n_events):
+            pct = t / duration * 100
+            partes = [f"\r  t={t:.3f}s ({pct:5.1f}%)  evts={n_events:>7,}"]
+            for tc in [1, 2, 4]:
+                lats = []
+                for oid in range(num_onus):
+                    lats.extend(metrics._latencies.get((oid, tc), []))
+                if lats:
+                    media_us = sum(lats) / len(lats) * 1e6
+                    cota_s   = sla_cfg.get(str(tc), {}).get("max_delay_s")
+                    marca    = "✓" if (cota_s is None or media_us <= cota_s * 1e6) else "✗"
+                    partes.append(f"T{tc}:{media_us:6.0f}µs{marca}")
+                else:
+                    partes.append(f"T{tc}:  ---")
+            print("  ".join(partes), end="", flush=True)
+        processed = engine.run(until=duration, progress_callback=_demo_cb, progress_every=5000)
+        print()
+    else:
+        processed = engine.run(until=duration)
 
     if verbose:
         print(f"  Eventos procesados: {processed:,}")
@@ -162,6 +179,8 @@ def main():
     parser.add_argument("--output",    type=str,   default=None,
                         help="Archivo CSV de salida (opcional)")
     parser.add_argument("--verbose",   action="store_true")
+    parser.add_argument("--demo",      action="store_true",
+                        help="Mostrar progreso en tiempo real (demo en vivo)")
     args = parser.parse_args()
 
     base_config = load_config(CONFIG_PATH)
@@ -176,7 +195,8 @@ def main():
     print(f"Simulando XG-PON: algoritmo={args.algorithm}, carga T-CONT4={args.load} Mbps/ONU, "
           f"ONUs={args.num_onus}, seed={args.seed}")
 
-    summary = run_simulation(config, args.algorithm, args.seed, verbose=args.verbose)
+    summary = run_simulation(config, args.algorithm, args.seed,
+                             verbose=args.verbose, demo=args.demo)
 
     # Mostrar resumen por T-CONT, incluyendo delay máximo y % cumplimiento SLA
     print(f"\n{'T-CONT':<8} {'Lat.media(us)':<14} {'P99(us)':<10} {'Max(us)':<10} "

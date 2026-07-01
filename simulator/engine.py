@@ -64,7 +64,8 @@ class SimEngine:
     def register(self, event_type: str, handler: Callable) -> None:
         self._handlers[event_type] = handler
 
-    def run(self, until: float) -> int:
+    def run(self, until: float, progress_callback=None,
+            progress_every: int = 5000) -> int:
         """Ejecuta el loop principal hasta 'until'. Retorna eventos procesados."""
         processed = 0
         while self._heap:
@@ -77,4 +78,6 @@ class SimEngine:
             if handler:
                 handler(evt)
             processed += 1
+            if progress_callback and processed % progress_every == 0:
+                progress_callback(self._now, processed)
         return processed
